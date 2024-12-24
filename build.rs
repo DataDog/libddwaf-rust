@@ -46,7 +46,7 @@ fn main() {
     if !archive_path.exists() {
         println!("Downloading {}", archive_url);
         let status = Command::new("curl")
-            .args(&["-Lf", "-o", archive_path.to_str().unwrap(), &archive_url])
+            .args(["-Lf", "-o", archive_path.to_str().unwrap(), &archive_url])
             .status()
             .expect("Failed to execute curl");
         assert!(status.success(), "Failed to download {}", archive_url);
@@ -57,7 +57,7 @@ fn main() {
         println!("Extracting {:?}", archive_path);
         fs::create_dir_all(&extract_path).expect("Failed to create extraction directory");
         let status = Command::new("tar")
-            .args(&[
+            .args([
                 "--strip-components=1",
                 "-xzf",
                 archive_path.to_str().unwrap(),
@@ -79,20 +79,23 @@ fn main() {
         "cargo:rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
-    println!("cargo:rustc-link-lib=ddwaf");
+    if cfg!(feature = "static_lib") {
+        println!("cargo:rustc-link-lib=static=ddwaf");
+    } else {
+        println!("cargo:rustc-link-lib=dylib=ddwaf");
+        // if we want to disable this in final binaries, see maybe
+        // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
+        println!(
+            "cargo:rustc-link-arg=-Wl,-rpath,{}",
+            lib_dir.to_str().unwrap()
+        );
+
+        #[cfg(target_os = "linux")]
+        println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+        #[cfg(target_os = "macos")]
+        println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path");
+    }
     println!("cargo:rerun-if-changed=build.rs");
-
-    // if we want to disable this in final binaries, see maybe
-    // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
-    println!(
-        "cargo:rustc-link-arg=-Wl,-rpath,{}",
-        lib_dir.to_str().unwrap()
-    );
-
-    #[cfg(target_os = "linux")]
-    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
-    #[cfg(target_os = "macos")]
-    println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path");
 
     // Generate bindings with bindgen
     let bindings = bindgen::Builder::default()

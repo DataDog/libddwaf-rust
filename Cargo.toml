@@ -13,6 +13,8 @@ cc = "1.0"
 bindgen = "0.69.5"
 
 [features]
-default = ["serde"]
+default = ["serde", "shared_lib"]
 serde = ["dep:serde"]
 serde_test = ["dep:serde", "dep:serde_json"]
+static_lib = []
+shared_lib = []

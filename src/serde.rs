@@ -6,10 +6,7 @@ use serde::{
     Deserializer,
 };
 
-use crate::{
-    CommonDdwafObj, CommonDdwafObjMut, DdwafObj, DdwafObjArray, DdwafObjMap, DdwafObjString,
-    DdwafObjType,
-};
+use crate::{CommonDdwafObj, DdwafObj, DdwafObjArray, DdwafObjMap, DdwafObjString, DdwafObjType};
 
 impl<'de> serde::Deserialize<'de> for DdwafObj {
     fn deserialize<D>(deserializer: D) -> Result<DdwafObj, D::Error>
@@ -117,8 +114,8 @@ impl<'de> serde::de::Visitor<'de> for DdwafObjVisitor {
             let mut dmap = DdwafObjMap::new(size.try_into().unwrap());
             let mut i: usize = 0;
             while let Some((key, value)) = map.next_entry::<Cow<'de, str>, DdwafObj>()? {
-                dmap[i] = value;
-                dmap[i].set_key_str(&key);
+                let key_str: &str = &key;
+                dmap[i] = (key_str, value).into();
                 i += 1;
             }
             if i != size {
@@ -132,8 +129,8 @@ impl<'de> serde::de::Visitor<'de> for DdwafObjVisitor {
             }
             let mut res = DdwafObjMap::new(vec.len().try_into().unwrap());
             for (i, (k, v)) in vec.into_iter().enumerate() {
-                res[i] = v;
-                res[i].set_key_str(&k);
+                let key_str: &str = &k;
+                res[i] = (key_str, v).into();
             }
             Ok(res.into())
         }
@@ -158,7 +155,7 @@ impl serde::Serialize for DdwafObj {
             DdwafObjType::Array => {
                 let array = self.as_type::<DdwafObjArray>().unwrap();
                 let mut seq_serializer = serializer.serialize_seq(Some(array.len()))?;
-                for value in array {
+                for value in array.iter() {
                     seq_serializer.serialize_element(value)?;
                 }
                 seq_serializer.end()
@@ -166,12 +163,25 @@ impl serde::Serialize for DdwafObj {
             DdwafObjType::Map => {
                 let map = self.as_type::<DdwafObjMap>().unwrap();
                 let mut map_serializer = serializer.serialize_map(Some(map.len()))?;
-                for (k, v) in map {
-                    map_serializer.serialize_entry(&String::from_utf8_lossy(k), v)?;
+                for keyed_val in map.iter() {
+                    map_serializer.serialize_entry(
+                        &String::from_utf8_lossy(keyed_val.key()),
+                        keyed_val.inner(),
+                    )?;
                 }
                 map_serializer.end()
             }
         }
+    }
+}
+
+impl serde::Serialize for DdwafObjArray {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let dobj = self.as_ddwaf_obj();
+        dobj.serialize(serializer)
     }
 }
 
@@ -180,15 +190,13 @@ impl serde::Serialize for DdwafObjMap {
     where
         S: serde::Serializer,
     {
-        let dobj: &DdwafObj = unsafe { &*(self as *const _ as *const DdwafObj) };
+        let dobj = self.as_ddwaf_obj();
         dobj.serialize(serializer)
     }
 }
 
 #[cfg(feature = "serde_test")]
 mod tests {
-    #[allow(unused_imports)]
-    use crate::CommonDdwafObjMut;
     #[allow(unused_imports)]
     use crate::{ddwaf_obj, ddwaf_obj_array, ddwaf_obj_map};
     #[allow(unused_imports)]
@@ -211,7 +219,7 @@ mod tests {
         // Test for a boolean
         let json = "true";
         let ddwaf_obj: DdwafObj = from_str(json).expect("Failed to deserialize bool");
-        assert_eq!(ddwaf_obj.to_bool().unwrap(), true);
+        assert!(ddwaf_obj.to_bool().unwrap());
 
         // Test for null
         let json = "null";
@@ -241,8 +249,8 @@ mod tests {
             .try_into()
             .unwrap();
         assert_eq!(map.len(), 2);
-        assert_eq!(map.gets("key1").unwrap().to_str().unwrap(), "value1");
-        assert_eq!(map.gets("key2").unwrap().to_u64().unwrap(), 42);
+        assert_eq!(map.get_str("key1").unwrap().to_str().unwrap(), "value1");
+        assert_eq!(map.get_str("key2").unwrap().to_u64().unwrap(), 42);
     }
 
     #[test]
@@ -250,8 +258,8 @@ mod tests {
         let json = "{\"key1\": 42, \"key2\": 43}";
         let map: DdwafObjMap = from_str::<DdwafObjMap>(json).expect("Failed to deserialize map");
         assert_eq!(map.len(), 2);
-        assert_eq!(map.gets("key1").unwrap().to_u64().unwrap(), 42);
-        assert_eq!(map.gets("key2").unwrap().to_u64().unwrap(), 43);
+        assert_eq!(map.get_str("key1").unwrap().to_u64().unwrap(), 42);
+        assert_eq!(map.get_str("key2").unwrap().to_u64().unwrap(), 43);
     }
 
     #[test]

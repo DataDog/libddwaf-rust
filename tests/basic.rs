@@ -1,4 +1,5 @@
 #![cfg(feature = "serde_test")]
+#![cfg(not(miri))]
 
 use std::{
     ffi::CStr,
@@ -79,11 +80,11 @@ fn basic_run_rule() {
     let loaded_rule_name = diagnostics
         .as_type::<DdwafObjMap>()
         .unwrap()
-        .gets("rules")
+        .get_str("rules")
         .unwrap()
         .as_type::<DdwafObjMap>()
         .unwrap()
-        .gets("loaded")
+        .get_str("loaded")
         .unwrap()
         .as_type::<DdwafObjArray>()
         .unwrap()[0]
@@ -106,15 +107,15 @@ fn basic_run_rule() {
 
     match res {
         WafRunResult::Match(result) => {
-            assert_eq!(result.is_timeout(), false);
+            assert!(!result.is_timeout());
 
             let events = result.events();
             assert_eq!(events.len(), 1);
             let first_event: &DdwafObjMap = events[0].as_type().unwrap();
             let rule_first_event: &DdwafObjMap =
-                first_event.gets("rule").unwrap().as_type().unwrap();
+                first_event.get_str("rule").unwrap().as_type().unwrap();
             assert_eq!(
-                rule_first_event.gets("id").unwrap().to_str().unwrap(),
+                rule_first_event.get_str("id").unwrap().to_str().unwrap(),
                 "arachni_rule"
             );
         }
@@ -130,7 +131,7 @@ fn test_known_actions() {
     let mut waf = WafInstance::new(&ruleset, Config::default(), None).unwrap();
 
     let actions = waf.known_actions();
-    assert_eq!(actions.is_some(), true);
+    assert!(actions.is_some());
     let actions = actions.unwrap();
     assert_eq!(actions[0].to_str().unwrap(), "block_request");
 }
