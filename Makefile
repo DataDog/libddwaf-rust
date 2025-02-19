@@ -1,3 +1,6 @@
+check: test miri clippy format_check
+.PHONY: check
+
 test:
 	cargo test --features serde_test
 .PHONY: miri
@@ -13,3 +16,7 @@ coverage:
 clippy:
 	cargo clippy
 .PHONY: clippy
+
+format_check:
+	cargo fmt -- --check
+.PHONY: format_check

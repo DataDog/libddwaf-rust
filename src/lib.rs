@@ -6,9 +6,10 @@ use std::{
     mem::MaybeUninit,
     ops::{Deref, Fn, Index, IndexMut},
     ptr::{addr_of_mut, null, null_mut, NonNull},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex},
 };
 
+use arc_swap::ArcSwap;
 use bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_INVALID;
 
 #[allow(unused)]
@@ -1556,11 +1557,11 @@ pub fn get_version() -> &'static CStr {
     unsafe { CStr::from_ptr(bindings::ddwaf_get_version()) }
 }
 
-pub struct Config {
+pub struct DdwafConfig {
     _cfg: bindings::ddwaf_config,
     obfuscator: Obfuscator,
 }
-impl Config {
+impl DdwafConfig {
     pub fn new(limits: Limits, obfuscator: Obfuscator) -> Self {
         Self {
             _cfg: bindings::ddwaf_config {
@@ -1572,12 +1573,12 @@ impl Config {
         }
     }
 }
-impl Default for Config {
+impl Default for DdwafConfig {
     fn default() -> Self {
         Self::new(Limits::default(), Obfuscator::default())
     }
 }
-impl Clone for Config {
+impl Clone for DdwafConfig {
     fn clone(&self) -> Self {
         let limits = self._cfg.limits;
         let obfuscator = self.obfuscator.clone();
@@ -1666,7 +1667,7 @@ impl Drop for Obfuscator {
 
 pub struct WafInstance {
     _handle: bindings::ddwaf_handle,
-    _config: Config,
+    _config: Option<DdwafConfig>, // for holding memory only
 }
 impl Drop for WafInstance {
     fn drop(&mut self) {
@@ -1674,16 +1675,14 @@ impl Drop for WafInstance {
     }
 }
 
-// Safety: ddwaf instances are effectively immutable once created and until
-// their destruction. This is despite ddwaf_update not taking a pointer to
-// const data.
+// SAFETY: ddwaf instances are effectively immutable
 unsafe impl Send for WafInstance {}
 unsafe impl Sync for WafInstance {}
 
 impl WafInstance {
     pub fn new<T: AsRef<bindings::ddwaf_object>>(
         ruleset: &T,
-        config: Config,
+        config: DdwafConfig,
         diagnostics: Option<&mut WafOwnedDdwafObj>,
     ) -> Result<Self, &'static str> {
         let handle = unsafe {
@@ -1701,31 +1700,7 @@ impl WafInstance {
         }
         Ok(Self {
             _handle: handle,
-            _config: config,
-        })
-    }
-
-    pub fn update(
-        &self,
-        ruleset: &DdwafObj,
-        diagnostics: Option<&mut WafOwnedDdwafObj>,
-    ) -> Result<Self, &'static str> {
-        let handle = unsafe {
-            bindings::ddwaf_update(
-                self._handle,
-                ruleset.as_ref(),
-                diagnostics
-                    .map(|d| &mut d._inner._obj as *mut bindings::ddwaf_object)
-                    .unwrap_or(null_mut()),
-            )
-        };
-
-        if handle.is_null() {
-            return Err("Failed to update handle");
-        }
-        Ok(Self {
-            _handle: handle,
-            _config: self._config.clone(),
+            _config: Some(config),
         })
     }
 
@@ -1964,16 +1939,105 @@ impl std::fmt::Debug for DdwafResult {
     }
 }
 
+pub struct DdwafBuilder {
+    _builder: bindings::ddwaf_builder,
+    _config: DdwafConfig, // for holding memory only
+}
+
+// SAFETY: no thread-local data and no data can be changed under us if we have an owning handle
+unsafe impl Send for DdwafBuilder {}
+// SAFETY: changes are only made through exclusive references
+unsafe impl Sync for DdwafBuilder {}
+impl DdwafBuilder {
+    pub fn new(config: Option<DdwafConfig>) -> Result<Self, &'static str> {
+        let config = config.unwrap_or_default();
+        let builder = DdwafBuilder {
+            _builder: unsafe { bindings::ddwaf_builder_init(&config._cfg) },
+            _config: config,
+        };
+
+        if builder._builder.is_null() {
+            Err("Failed to initialize builder")
+        } else {
+            Ok(builder)
+        }
+    }
+
+    pub fn add_or_update_config(
+        &mut self,
+        path: &[u8],
+        ruleset: &impl AsRef<bindings::ddwaf_object>,
+        diagnostics: Option<&mut WafOwnedDdwafObj>,
+    ) -> bool {
+        unsafe {
+            bindings::ddwaf_builder_add_or_update_config(
+                self._builder,
+                path.as_ptr() as _,
+                path.len() as u32,
+                // function takes non-const, but doesn't actually change config
+                ruleset.as_ref() as *const _ as *mut _,
+                diagnostics
+                    .map(|d| &mut d._inner._obj as *mut bindings::ddwaf_object)
+                    .unwrap_or(null_mut()),
+            )
+        }
+    }
+
+    pub fn build_instance(&mut self) -> Result<WafInstance, &'static str> {
+        let raw_instance = unsafe { bindings::ddwaf_builder_build_instance(self._builder) };
+        if raw_instance.is_null() {
+            return Err("Failed to build instance");
+        }
+        Ok(WafInstance {
+            _handle: raw_instance,
+            _config: None,
+        })
+    }
+
+    pub fn remove_config(&mut self, path: &[u8]) -> bool {
+        unsafe {
+            bindings::ddwaf_builder_remove_config(
+                self._builder,
+                path.as_ptr() as _,
+                path.len() as u32,
+            )
+        }
+    }
+}
+impl Drop for DdwafBuilder {
+    fn drop(&mut self) {
+        unsafe { bindings::ddwaf_builder_destroy(self._builder) }
+    }
+}
+
 // A WAF instance that can be shared (through clone())  and updated by any thread.
 // More performant alternatives exist, with better reclamation strategies
 pub struct UpdateableWafInstance {
-    inner: Arc<RwLock<Arc<WafInstance>>>,
+    inner: Arc<UpdateableWafInstanceInner>,
+}
+struct UpdateableWafInstanceInner {
+    builder: Mutex<DdwafBuilder>,
+    waf_instance: ArcSwap<WafInstance>,
 }
 impl UpdateableWafInstance {
-    pub fn new(waf: WafInstance) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(Arc::new(waf))),
+    pub const INITIAL_RULESET: &'static [u8] = b"<initial_ruleset>";
+
+    pub fn new(
+        ruleset: &impl AsRef<bindings::ddwaf_object>,
+        config: Option<DdwafConfig>,
+        diagnostics: Option<&mut WafOwnedDdwafObj>,
+    ) -> Result<Self, &'static str> {
+        let mut builder = DdwafBuilder::new(config)?;
+        if !builder.add_or_update_config(Self::INITIAL_RULESET, ruleset, diagnostics) {
+            return Err("Failed to add initial ruleset");
         }
+        let waf = builder.build_instance()?;
+        Ok(Self {
+            inner: Arc::new(UpdateableWafInstanceInner {
+                builder: Mutex::new(builder),
+                waf_instance: ArcSwap::from_pointee(waf),
+            }),
+        })
     }
 }
 impl Clone for UpdateableWafInstance {
@@ -1981,6 +2045,34 @@ impl Clone for UpdateableWafInstance {
         Self {
             inner: self.inner.clone(), // clone outer arc
         }
+    }
+}
+impl UpdateableWafInstance {
+    pub fn current(&self) -> Arc<WafInstance> {
+        self.inner.waf_instance.load().clone()
+    }
+
+    pub fn add_or_update_config(
+        &self,
+        path: &[u8],
+        ruleset: &impl AsRef<bindings::ddwaf_object>,
+        diagnostics: Option<&mut WafOwnedDdwafObj>,
+    ) -> bool {
+        let mut guard = self.inner.builder.lock().unwrap();
+        guard.add_or_update_config(path, ruleset, diagnostics)
+    }
+
+    pub fn remove_config(&self, path: &[u8]) -> bool {
+        let mut guard = self.inner.builder.lock().unwrap();
+        guard.remove_config(path)
+    }
+
+    pub fn update(&self) -> Result<Arc<WafInstance>, &'static str> {
+        let mut guard = self.inner.builder.lock().unwrap();
+        let new_instance = Arc::new(guard.build_instance()?);
+        let old = self.inner.waf_instance.swap(new_instance.clone());
+        drop(old);
+        Ok(new_instance)
     }
 }
 
@@ -2032,23 +2124,6 @@ macro_rules! __repl_expr_with_unit {
     ($e:expr) => {
         ()
     };
-}
-
-impl UpdateableWafInstance {
-    pub fn current(&self) -> Arc<WafInstance> {
-        self.inner.read().unwrap().clone() // clone inner arc holding read lock
-    }
-
-    pub fn update(
-        &self,
-        ruleset: &DdwafObj,
-        diagnostics: Option<&mut WafOwnedDdwafObj>,
-    ) -> Result<Arc<WafInstance>, &'static str> {
-        let mut waf = self.inner.write().unwrap();
-        let new_waf = waf.update(ruleset, diagnostics)?;
-        *waf = Arc::new(new_waf);
-        Ok(waf.clone())
-    }
 }
 
 #[cfg(test)]

@@ -3,13 +3,17 @@
 
 use std::{
     ffi::CStr,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Arc, Mutex, Once,
+    },
+    thread::{self, sleep},
     time::Duration,
 };
 
 use libddwaf::{
-    CommonDdwafObj, Config, DdwafLogLevel, DdwafObj, DdwafObjArray, DdwafObjMap, DdwafObjType,
-    WafInstance, WafOwnedDdwafObj, WafRunResult,
+    ddwaf_obj_map, CommonDdwafObj, DdwafConfig, DdwafLogLevel, DdwafObj, DdwafObjArray,
+    DdwafObjMap, DdwafObjType, UpdateableWafInstance, WafInstance, WafOwnedDdwafObj, WafRunResult,
 };
 
 const ARACHNI_RULE: &str = r#"
@@ -50,31 +54,39 @@ const ARACHNI_RULE: &str = r#"
 }
 "#;
 
+fn log_callback(
+    level: DdwafLogLevel,
+    function: &'static CStr,
+    file: &'static CStr,
+    line: u32,
+    message: &[std::os::raw::c_char],
+) {
+    let msg_str = String::from_utf8_lossy(unsafe { &*(message as *const [i8] as *const [u8]) });
+    println!(
+        "[{:?}] {} at {} on {}:{}",
+        level,
+        msg_str,
+        function.to_string_lossy(),
+        file.to_string_lossy(),
+        line,
+    );
+}
+
+static INIT: Once = Once::new();
+fn init() {
+    INIT.call_once(|| {
+        unsafe { libddwaf::set_log_cb(Some(log_callback), DdwafLogLevel::Debug) };
+    })
+}
+
 #[test]
 fn basic_run_rule() {
-    fn log_callback(
-        level: DdwafLogLevel,
-        function: &'static CStr,
-        file: &'static CStr,
-        line: u32,
-        message: &[std::os::raw::c_char],
-    ) {
-        let msg_str = String::from_utf8_lossy(unsafe { &*(message as *const [i8] as *const [u8]) });
-        println!(
-            "[{:?}] {} at {} on {}:{}",
-            level,
-            msg_str,
-            function.to_string_lossy(),
-            file.to_string_lossy(),
-            line,
-        );
-    }
-    unsafe { libddwaf::set_log_cb(Some(log_callback), DdwafLogLevel::Debug) };
+    init();
 
     let ruleset: DdwafObj = serde_json::from_str(ARACHNI_RULE).unwrap();
 
     let mut diagnostics = WafOwnedDdwafObj::default();
-    let waf = WafInstance::new(&ruleset, Config::default(), Some(&mut diagnostics)).unwrap();
+    let waf = WafInstance::new(&ruleset, DdwafConfig::default(), Some(&mut diagnostics)).unwrap();
 
     assert_eq!(diagnostics.get_type(), DdwafObjType::Map);
     let loaded_rule_name = diagnostics
@@ -128,18 +140,17 @@ fn basic_run_rule() {
 #[test]
 fn test_known_actions() {
     let ruleset: DdwafObj = serde_json::from_str(ARACHNI_RULE).unwrap();
-    let mut waf = WafInstance::new(&ruleset, Config::default(), None).unwrap();
+    let mut waf = WafInstance::new(&ruleset, DdwafConfig::default(), None).unwrap();
 
     let actions = waf.known_actions();
-    assert!(actions.is_some());
-    let actions = actions.unwrap();
+    assert!(!actions.is_empty());
     assert_eq!(actions[0].to_str().unwrap(), "block_request");
 }
 
 #[test]
 fn run_rule_threaded() {
     let ruleset: DdwafObj = serde_json::from_str(ARACHNI_RULE).unwrap();
-    let waf = Arc::new(WafInstance::new(&ruleset, Config::default(), None).unwrap());
+    let waf = Arc::new(WafInstance::new(&ruleset, DdwafConfig::default(), None).unwrap());
 
     let mut header = DdwafObjMap::new(1);
     header[0] = ("user-agent", "Arachni").into();
@@ -178,4 +189,107 @@ fn run_rule_threaded() {
         .collect();
 
     t.into_iter().for_each(|t| t.join().unwrap());
+}
+
+const DISABLE_ARACHNI_RULE_PATH: &[u8] = b"disable_arachni";
+const DISABLE_ARACHNI_RULE: &str = r#"
+{
+    "rules_override": [
+        {
+            "rules_target": [
+                {
+                    "rule_id": "arachni_rule"
+                }
+            ],
+            "enabled": false
+        }
+    ]
+}
+"#;
+
+#[test]
+fn threaded_updateable_waf_instance() {
+    init();
+
+    let ruleset: DdwafObj = serde_json::from_str(ARACHNI_RULE).unwrap();
+    let upd_waf = UpdateableWafInstance::new(&ruleset, None, None).unwrap();
+
+    // add a second rule because it's forbidden to have no rules
+    let ruleset2: DdwafObj = serde_json::from_str(
+        &ARACHNI_RULE
+            .replace("Arachni", "Inhcara")
+            .replace("arachni_rule", "inhcara_rule"),
+    )
+    .unwrap();
+    upd_waf.add_or_update_config(b"2nd rule", &ruleset2, None);
+
+    let update_thread = std::thread::spawn({
+        let upd_waf_copy = upd_waf.clone();
+        let disable_ruleset: DdwafObj = serde_json::from_str(DISABLE_ARACHNI_RULE).unwrap();
+        move || {
+            let mut disable_next = true;
+            for _ in 0..10 {
+                sleep(Duration::from_millis(100));
+                if disable_next {
+                    let res = upd_waf_copy.add_or_update_config(
+                        DISABLE_ARACHNI_RULE_PATH,
+                        &disable_ruleset,
+                        None,
+                    );
+                    if !res {
+                        panic!("add_or_update_config failed");
+                    }
+                    println!("disable");
+                } else {
+                    upd_waf_copy.remove_config(DISABLE_ARACHNI_RULE_PATH);
+                    println!("enable");
+                }
+                upd_waf_copy.update().expect("update did not succeed");
+                disable_next = !disable_next;
+            }
+        }
+    });
+
+    let data = Arc::new(ddwaf_obj_map!((
+        "server.request.headers.no_cookies",
+        ddwaf_obj_map!(("user-agent", "Arachni"))
+    )));
+
+    let stop_signal = &*Box::leak(Box::new(AtomicBool::new(false)));
+    let t: Vec<_> = (0..2)
+        .map(|_| {
+            std::thread::spawn({
+                let upd_waf_copy = upd_waf.clone();
+                let data_copy = data.clone();
+                let mut matches = 0u64;
+                let mut non_matches = 0u64;
+                move || {
+                    while !stop_signal.load(Relaxed) {
+                        let cur_instance = upd_waf_copy.current();
+                        println!("address of instance: {:p}", Arc::as_ptr(&cur_instance));
+                        let mut ctx = cur_instance.create_context();
+                        let res = ctx.run(None, Some(&*data_copy), Duration::from_millis(500));
+                        match res {
+                            WafRunResult::Match(_) => {
+                                matches += 1;
+                            }
+                            _ => non_matches += 1,
+                        };
+                        thread::sleep(Duration::from_millis(20))
+                    }
+                    (matches, non_matches)
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+
+    update_thread.join().unwrap();
+    stop_signal.store(true, Relaxed);
+
+    for jh in t {
+        let (matches, non_matches) = jh.join().unwrap();
+        println!("positive: {matches}, negative: {non_matches}");
+        assert!(matches > 10);
+        assert!(non_matches > 10);
+    }
 }
