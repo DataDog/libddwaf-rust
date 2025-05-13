@@ -10,7 +10,6 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_INVALID;
 
 #[allow(unused)]
 #[allow(non_camel_case_types)]
@@ -300,18 +299,32 @@ impl AsRawDdwafObjMut for DdwafObjMap {
 
 // generic
 impl bindings::ddwaf_object {
-    unsafe fn unchecked_as_ref<T>(&self) -> &T {
+    /// Converts a naked reference to a ddwaf_object into a reference to one of the user-friendly
+    /// types. The caller must guarantee the conversion is valid.
+    ///
+    /// # Safety
+    /// The type [`T`] can represent this ddwaf_object type ([`bindings::DDWAF_OBJ_TYPE`]).
+    unsafe fn unchecked_as_ref<T: AsRef<bindings::ddwaf_object>>(&self) -> &T {
         &*(self as *const bindings::ddwaf_object as *const T)
     }
+
+    /// Converts a naked mutable reference to a ddwaf_object into a mutable reference to one of the
+    ///
+    /// # Safety
+    /// - The type [`T`] can represent this ddwaf_object type ([`bindings::DDWAF_OBJ_TYPE`]).
+    /// - The destructor of [`T`] must be compatible with the value of self.
     unsafe fn unchecked_as_ref_mut<T: AsRawDdwafObjMut>(&mut self) -> &mut T {
         &mut *(self as *mut bindings::ddwaf_object as *mut T)
     }
 
     fn as_ddwaf_obj_ref(&self) -> &DdwafObj {
+        // SAFETY: DdwafObj is compatible with all valid ddwaf_objects.
         unsafe { self.unchecked_as_ref::<DdwafObj>() }
     }
 
     fn as_keyed_ddwaf_obj_ref(&self) -> &Keyed<DdwafObj> {
+        // SAFETY: Keyed<DdwafObj> is compatible with all valid ddwaf_objects, even if their key
+        // is not set.
         unsafe { self.unchecked_as_ref::<Keyed<DdwafObj>>() }
     }
 
@@ -330,7 +343,7 @@ impl Default for bindings::ddwaf_object {
             parameterNameLength: Default::default(),
             __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { uintValue: 0 },
             nbEntries: Default::default(),
-            type_: DDWAF_OBJ_TYPE_DDWAF_OBJ_INVALID,
+            type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_INVALID,
         }
     }
 }
@@ -599,6 +612,7 @@ impl<T: AsRef<bindings::ddwaf_object> + AsRawDdwafObjMut + std::fmt::Debug> std:
 
 /// # Safety
 ///
+/// The key, if present, must be a raw-converted Box<[u8]>.
 /// Afterwards, the object must either be discarded or parameterName /
 /// parameterNameLength must be set, since they are now garbage.
 pub(crate) unsafe fn drop_key(obj: &mut bindings::ddwaf_object) {
@@ -820,6 +834,10 @@ where
     }
 }
 
+/// # Safety
+///
+/// If the object is a string, array or map, the requirements of the [`drop_ddwaf_object_string`],
+/// [`drop_ddwaf_object_array`], or [`drop_ddwaf_object_map`].
 unsafe fn drop_ddwaf_object(obj: &mut bindings::ddwaf_object) {
     if obj.type_ == bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING {
         drop_ddwaf_object_string(obj);
@@ -1157,6 +1175,11 @@ impl TryFrom<DdwafObj> for DdwafObjString {
         res
     }
 }
+
+/// # Safety
+///
+/// - The ddwaf_object must be a a valid representation of a string.
+/// - The stringValue must be a raw-converted Box<[u8]>.
 unsafe fn drop_ddwaf_object_string(obj: &mut bindings::ddwaf_object) {
     debug_assert!(obj.type_ == bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING);
     let sval = obj.__bindgen_anon_1.stringValue;
@@ -1339,6 +1362,13 @@ impl TryFrom<DdwafObj> for DdwafObjArray {
         res
     }
 }
+
+/// # Safety
+///
+/// - The ddwaf_object must be a a valid representation of an array.
+/// - The array must be an [`std::alloc::alloc`]ated array of ddwaf_object of the proper size.
+/// - The individual elements of the array must be valid `ddwaf_object`s that can be dropped with
+///   [`drop_ddwaf_object`].
 unsafe fn drop_ddwaf_object_array(obj: &mut bindings::ddwaf_object) {
     debug_assert!(obj.type_ == bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_ARRAY);
     let array = obj.__bindgen_anon_1.array;
@@ -1525,6 +1555,13 @@ impl TryFrom<DdwafObj> for DdwafObjMap {
         res
     }
 }
+
+/// # Safety
+///
+/// - The ddwaf_object must be a a valid representation of a map.
+/// - The array must be an [`std::alloc::alloc`]ated array of ddwaf_object of the proper size.
+/// - The individual elements of the map must be valid `ddwaf_object`s that can be dropped with
+///   [`drop_ddwaf_object`] and [`drop_key`].
 unsafe fn drop_ddwaf_object_map(obj: &mut bindings::ddwaf_object) {
     debug_assert!(obj.type_ == bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_MAP);
     let array = obj.__bindgen_anon_1.array;
