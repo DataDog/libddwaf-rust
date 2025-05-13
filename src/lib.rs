@@ -91,6 +91,22 @@ impl std::fmt::Display for DdwafObjTypeError {
 }
 impl std::error::Error for DdwafObjTypeError {}
 
+#[derive(Debug)]
+pub struct DdwafGenericError {
+    message: &'static str,
+}
+impl std::fmt::Display for DdwafGenericError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for DdwafGenericError {}
+impl From<&'static str> for DdwafGenericError {
+    fn from(message: &'static str) -> Self {
+        DdwafGenericError { message }
+    }
+}
+
 #[repr(C)]
 pub struct DdwafObj {
     _obj: bindings::ddwaf_object,
@@ -1684,7 +1700,7 @@ impl WafInstance {
         ruleset: &T,
         config: DdwafConfig,
         diagnostics: Option<&mut WafOwnedDdwafObj>,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, DdwafGenericError> {
         let handle = unsafe {
             bindings::ddwaf_init(
                 ruleset.as_ref(),
@@ -1696,7 +1712,7 @@ impl WafInstance {
         };
 
         if handle.is_null() {
-            return Err("Failed to initialize handle");
+            return Err("Failed to initialize handle".into());
         }
         Ok(Self {
             _handle: handle,
@@ -1949,7 +1965,7 @@ unsafe impl Send for DdwafBuilder {}
 // SAFETY: changes are only made through exclusive references
 unsafe impl Sync for DdwafBuilder {}
 impl DdwafBuilder {
-    pub fn new(config: Option<DdwafConfig>) -> Result<Self, &'static str> {
+    pub fn new(config: Option<DdwafConfig>) -> Result<Self, DdwafGenericError> {
         let config = config.unwrap_or_default();
         let builder = DdwafBuilder {
             _builder: unsafe { bindings::ddwaf_builder_init(&config._cfg) },
@@ -1957,7 +1973,7 @@ impl DdwafBuilder {
         };
 
         if builder._builder.is_null() {
-            Err("Failed to initialize builder")
+            Err("Failed to initialize builder (ddwaf_builder_init returned null)".into())
         } else {
             Ok(builder)
         }
@@ -1983,10 +1999,12 @@ impl DdwafBuilder {
         }
     }
 
-    pub fn build_instance(&mut self) -> Result<WafInstance, &'static str> {
+    pub fn build_instance(&mut self) -> Result<WafInstance, DdwafGenericError> {
         let raw_instance = unsafe { bindings::ddwaf_builder_build_instance(self._builder) };
         if raw_instance.is_null() {
-            return Err("Failed to build instance");
+            return Err(
+                "Failed to build instance (ddwaf_builder_build_instance returned null)".into(),
+            );
         }
         Ok(WafInstance {
             _handle: raw_instance,
@@ -2026,10 +2044,12 @@ impl UpdateableWafInstance {
         ruleset: &impl AsRef<bindings::ddwaf_object>,
         config: Option<DdwafConfig>,
         diagnostics: Option<&mut WafOwnedDdwafObj>,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, DdwafGenericError> {
         let mut builder = DdwafBuilder::new(config)?;
         if !builder.add_or_update_config(Self::INITIAL_RULESET, ruleset, diagnostics) {
-            return Err("Failed to add initial ruleset");
+            return Err(
+                "Failed to add initial ruleset (add_or_update_config returned false)".into(),
+            );
         }
         let waf = builder.build_instance()?;
         Ok(Self {
@@ -2067,7 +2087,7 @@ impl UpdateableWafInstance {
         guard.remove_config(path)
     }
 
-    pub fn update(&self) -> Result<Arc<WafInstance>, &'static str> {
+    pub fn update(&self) -> Result<Arc<WafInstance>, DdwafGenericError> {
         let mut guard = self.inner.builder.lock().unwrap();
         let new_instance = Arc::new(guard.build_instance()?);
         let old = self.inner.waf_instance.swap(new_instance.clone());
