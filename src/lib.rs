@@ -4,7 +4,7 @@ use std::{
     ffi::{CStr, CString},
     fmt::Write,
     mem::MaybeUninit,
-    ops::{Deref, Fn, Index, IndexMut},
+    ops::{Deref, DerefMut, Fn, Index, IndexMut},
     ptr::{addr_of_mut, null, null_mut, NonNull},
     sync::{Arc, Mutex},
 };
@@ -1605,6 +1605,11 @@ impl Deref for WafOwnedDdwafObj {
         &self._inner
     }
 }
+impl DerefMut for WafOwnedDdwafObj {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self._inner
+    }
+}
 
 pub fn get_version() -> &'static CStr {
     unsafe { CStr::from_ptr(bindings::ddwaf_get_version()) }
@@ -2058,6 +2063,30 @@ impl DdwafBuilder {
             )
         }
     }
+
+    pub fn count_config_paths(&mut self, filter: &[u8]) -> u32 {
+        unsafe {
+            bindings::ddwaf_builder_get_config_paths(
+                self._builder,
+                null_mut(),
+                filter.as_ptr() as _,
+                filter.len() as u32,
+            )
+        }
+    }
+
+    pub fn get_config_paths(&mut self, filter: &[u8]) -> WafOwnedDdwafObj {
+        let mut res = WafOwnedDdwafObj::default();
+        unsafe {
+            let _ = bindings::ddwaf_builder_get_config_paths(
+                self._builder,
+                res.as_mut(),
+                filter.as_ptr() as _,
+                filter.len() as u32,
+            );
+        }
+        res
+    }
 }
 impl Drop for DdwafBuilder {
     fn drop(&mut self) {
@@ -2122,6 +2151,16 @@ impl UpdateableWafInstance {
     pub fn remove_config(&self, path: &[u8]) -> bool {
         let mut guard = self.inner.builder.lock().unwrap();
         guard.remove_config(path)
+    }
+
+    pub fn count_config_paths(&self, filter: &[u8]) -> u32 {
+        let mut guard = self.inner.builder.lock().unwrap();
+        guard.count_config_paths(filter)
+    }
+
+    pub fn get_config_paths(&self, filter: &[u8]) -> WafOwnedDdwafObj {
+        let mut guard = self.inner.builder.lock().unwrap();
+        guard.get_config_paths(filter)
     }
 
     pub fn update(&self) -> Result<Arc<WafInstance>, DdwafGenericError> {

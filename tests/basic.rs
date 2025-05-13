@@ -223,6 +223,12 @@ fn threaded_updateable_waf_instance() {
     .unwrap();
     upd_waf.add_or_update_config(b"2nd rule", &ruleset2, None);
 
+    assert_eq!(upd_waf.count_config_paths(b"2nd rule"), 1);
+    let paths = upd_waf.get_config_paths(b"2nd rule");
+    let paths: &DdwafObjArray = paths.as_type().unwrap();
+    assert_eq!(paths.len(), 1);
+    assert_eq!(paths[0].to_str().unwrap(), "2nd rule");
+
     let update_thread = std::thread::spawn({
         let upd_waf_copy = upd_waf.clone();
         let disable_ruleset: DdwafObj = serde_json::from_str(DISABLE_ARACHNI_RULE).unwrap();
