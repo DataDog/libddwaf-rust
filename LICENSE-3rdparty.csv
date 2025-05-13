@@ -1,0 +1,8 @@
+Component,Origin,License,Copyright
+arc-swap,https://github.com/vorner/arc-swap,MIT OR Apache-2.0,Michal 'vorner' Vaner <vorner@vorner.cz>
+libc,https://github.com/rust-lang/libc,MIT OR Apache-2.0,The Rust Project Developers
+proc-macro2,https://github.com/dtolnay/proc-macro2,MIT OR Apache-2.0,"David Tolnay <dtolnay@gmail.com>, Alex Crichton <alex@alexcrichton.com>"
+quote,https://github.com/dtolnay/quote,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>
+serde,https://github.com/serde-rs/serde,MIT OR Apache-2.0,"Erick Tryzelaar <erick.tryzelaar@gmail.com>, David Tolnay <dtolnay@gmail.com>"
+syn,https://github.com/dtolnay/syn,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>
+unicode-ident,https://github.com/dtolnay/unicode-ident,(MIT OR Apache-2.0) AND Unicode-DFS-2016,David Tolnay <dtolnay@gmail.com>
