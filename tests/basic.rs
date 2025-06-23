@@ -121,7 +121,7 @@ fn basic_run_rule() {
         WafRunResult::Match(result) => {
             assert!(!result.is_timeout());
 
-            let events = result.events();
+            let events = result.events().expect("Expected some events");
             assert_eq!(events.len(), 1);
             let first_event: &DdwafObjMap = events[0].as_type().unwrap();
             let rule_first_event: &DdwafObjMap =

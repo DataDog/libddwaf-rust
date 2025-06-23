@@ -1,3 +1,57 @@
+//! Rust bindings for the [`libddwaf` library](https://github.com/DataDog/libddwaf).
+//!
+//! # Basic Use
+//! ```rust
+//! use libddwaf::{
+//!     ddwaf_obj_array,
+//!     ddwaf_obj_map,
+//!     DdwafObj,
+//!     DdwafBuilder,
+//!     DdwafConfig,
+//!     WafOwnedDdwafObj,
+//!     WafRunResult,
+//! };
+//!
+//! let mut builder = DdwafBuilder::new(Some(DdwafConfig::default()))
+//!     .expect("Failed to build WAF instance");
+//! let rule_set = ddwaf_obj_map!{
+//!     /* Typically obtained by parsing a rules file using the serde feature */
+//!     ("rules", ddwaf_obj_array!{ ddwaf_obj_map!{
+//!         ("id", "1"),
+//!         ("name", "rule 1"),
+//!         ("tags", ddwaf_obj_map!{ ("type", "flow1"), ("category", "test") }),
+//!         ("conditions", ddwaf_obj_array!{ ddwaf_obj_map!{
+//!             ("operator", "match_regex"),
+//!             ("parameters", ddwaf_obj_map!{
+//!                 ("regex", ".*"),
+//!                 ("inputs", ddwaf_obj_array!{ ddwaf_obj_map!{ ("address", "arg1" )} }),
+//!             }),
+//!         } }),
+//!         ("on_match", ddwaf_obj_array!{ "block" })
+//!     } }),
+//! };
+//! let mut diagnostics = WafOwnedDdwafObj::default();
+//! if !builder.add_or_update_config(b"config/file/logical/path", &rule_set, Some(&mut diagnostics)) {
+//!     panic!("Failed to add or update config!");
+//! }
+//! let waf = builder.build_instance().expect("Failed to build WAF instance");
+//! let mut waf_ctx = waf.create_context();
+//! let data = ddwaf_obj_map!{
+//!     ("arg1", "value1"),
+//! };
+//! match waf_ctx.run(Some(data), None, std::time::Duration::from_millis(1)) {
+//!     WafRunResult::Match(res) => {
+//!         assert!(!res.is_timeout());
+//!         assert!(res.keep());
+//!         assert!(res.duration() >= std::time::Duration::default());
+//!         assert_eq!(res.events().expect("Expected events").len(), 1);
+//!         assert_eq!(res.actions().expect("Expected actions").len(), 1);
+//!         assert_eq!(res.attributes().expect("Expected attributes").len(), 0);
+//!     },
+//!     _ => panic!("Unexpected result"),
+//! }
+//! ```
+
 use core::slice;
 use std::{
     alloc::Layout,
@@ -11,20 +65,12 @@ use std::{
 
 use arc_swap::ArcSwap;
 
-#[allow(unused)]
-#[allow(non_camel_case_types)]
-#[allow(non_snake_case)]
-#[allow(non_upper_case_globals)]
-mod bindings {
-    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-}
-
-mod private {
-    pub trait Sealed {}
-}
 #[cfg(feature = "serde")]
 pub mod serde;
 pub mod shallow;
+
+mod bindings;
+mod private;
 
 /// # Safety
 ///
@@ -40,32 +86,43 @@ unsafe fn no_fail_alloc(layout: Layout) -> *mut u8 {
     ptr
 }
 
+/// Identifies the type of the value stored in a [DdwafObj].
 #[repr(u32)]
 #[derive(Debug, PartialEq)]
 pub enum DdwafObjType {
+    /// An invalid value. This can be used as a placeholder to retain the key
+    /// associated with an object that was only aprtially encoded.
     Invalid = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_INVALID,
+    /// A signed integer with 64-bit precision.
     Signed = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_SIGNED,
+    /// An unsigned integer with 64-bit precision.
     Unsigned = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_UNSIGNED,
+    /// A string value.
     String = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING,
+    /// An array of [DdwafObj].
     Array = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_ARRAY,
+    /// A map of string-keyed [DdwafObj].
     Map = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_MAP,
+    /// A boolean value.
     Bool = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_BOOL,
+    /// A floating point value (64-bit precision).
     Float = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_FLOAT,
+    /// The null value.
     Null = bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_NULL,
 }
 impl TryFrom<::std::os::raw::c_uint> for DdwafObjType {
     type Error = DdwafObjTypeError;
     fn try_from(value: ::std::os::raw::c_uint) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(DdwafObjType::Invalid),
-            1 => Ok(DdwafObjType::Signed),
-            2 => Ok(DdwafObjType::Unsigned),
-            4 => Ok(DdwafObjType::String),
-            8 => Ok(DdwafObjType::Array),
-            16 => Ok(DdwafObjType::Map),
-            32 => Ok(DdwafObjType::Bool),
-            64 => Ok(DdwafObjType::Float),
-            128 => Ok(DdwafObjType::Null),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_INVALID => Ok(DdwafObjType::Invalid),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_SIGNED => Ok(DdwafObjType::Signed),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_UNSIGNED => Ok(DdwafObjType::Unsigned),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING => Ok(DdwafObjType::String),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_ARRAY => Ok(DdwafObjType::Array),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_MAP => Ok(DdwafObjType::Map),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_BOOL => Ok(DdwafObjType::Bool),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_FLOAT => Ok(DdwafObjType::Float),
+            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_NULL => Ok(DdwafObjType::Null),
             _ => Err(Self::Error {
                 message: "Invalid DDWAFObjType value",
             }),
@@ -73,9 +130,11 @@ impl TryFrom<::std::os::raw::c_uint> for DdwafObjType {
     }
 }
 
-// One of: DdwafObjUnsignedInt, DdwafObjSignedInt, DdwafObjFloat,
-// DdwafObjString, DdwafObjArray, DdwafObjMap, DdwafObjBool, DdwafObjNull
+/// This trait is implemented by type-safe interfaces to the [DdwafObj], with
+/// one implementation for each [DdwafObjType].
 pub trait TypedDdwafObj: private::Sealed + AsRef<bindings::ddwaf_object> {
+    /// The associated [DdwafObjType] constant corresponding to the typed
+    /// object's type discriminator.
     const TYPE: DdwafObjType;
 }
 
@@ -106,46 +165,56 @@ impl From<&'static str> for DdwafGenericError {
     }
 }
 
+/// A [DdwafObj] is the low-level representation of an arbitrary WAF object.
+/// It is usually converted to a [TypedDdwafObj] by calling [DdwafObj::as_type].
 #[repr(C)]
 pub struct DdwafObj {
     _obj: bindings::ddwaf_object,
 }
 
+/// The WAF object representation of a 64-bit unsigned integer.
 #[repr(C)]
 pub struct DdwafObjUnsignedInt {
     _obj: bindings::ddwaf_object,
 }
 
+/// The WAF object representation of a 64-bit signed integer.
 #[repr(C)]
 pub struct DdwafObjSignedInt {
     _obj: bindings::ddwaf_object,
 }
 
+/// The WAF object representation of a 64-bit floating point value.
 #[repr(C)]
 pub struct DdwafObjFloat {
     _obj: bindings::ddwaf_object,
 }
 
+/// The WAF object representation of a string value.
 #[repr(C)]
 pub struct DdwafObjString {
     _obj: bindings::ddwaf_object,
 }
 
+/// The WAF object representation of a boolean value.
 #[repr(C)]
 pub struct DdwafObjBool {
     _obj: bindings::ddwaf_object,
 }
 
+/// The WAF object representation of the null value.
 #[repr(C)]
 pub struct DdwafObjNull {
     _obj: bindings::ddwaf_object,
 }
 
+/// The WAF object representation of an array of [DdwafObj].
 #[repr(C)]
 pub struct DdwafObjArray {
     _obj: bindings::ddwaf_object,
 }
 
+/// The WAF object representation of a map of string-keyed [DdwafObj].
 #[repr(C)]
 pub struct DdwafObjMap {
     _obj: bindings::ddwaf_object,
@@ -163,10 +232,11 @@ pub trait AsRawDdwafObjMut: private::Sealed {
     /// Additionally, the caller would leak memory if it dropped the value through
     /// the returned reference (e.g. by calling `std::mem::replace`), since
     /// bindings::ddwaf_object is not `Drop` (see swapped destructors in
-    /// https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=aeea4aba8f960bf0c63f6185f016a94d )
+    /// <https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=aeea4aba8f960bf0c63f6185f016a94d>)
     unsafe fn as_mut(&mut self) -> &mut bindings::ddwaf_object;
 }
 
+/// A [DdwafObj] that is associated with a key string.
 #[repr(C)]
 pub struct Keyed<T: AsRef<bindings::ddwaf_object> + AsRawDdwafObjMut> {
     value: T,
@@ -183,7 +253,7 @@ where
 }
 impl<T> private::Sealed for Keyed<T> where T: AsRef<bindings::ddwaf_object> + AsRawDdwafObjMut {}
 
-// implement Send + Sync on ddwaf_object to avoid haing to implement it on each struct
+// implement Send + Sync on ddwaf_object to avoid having to implement it on each struct
 // In any case, there's nothing thread unsafe about bindings::ddwaf_object
 // (as long as its pointers are not dereferenced, which is unsafe anyway)
 unsafe impl Send for bindings::ddwaf_object {}
@@ -1292,6 +1362,8 @@ impl AsMut<[DdwafObj]> for DdwafObjArray {
         unsafe { std::slice::from_raw_parts_mut(array as *mut _, self.len()) }
     }
 }
+
+/// An iterator over a [DdwafObjArray] or [DdwafObjMap].
 pub struct DdwafArrayIter<T> {
     // we take ownership of this pointer.
     // Don't convert to Box<[T]>; while dropping both the array and its elements
@@ -1588,6 +1660,8 @@ impl Drop for DdwafObjMap {
     }
 }
 
+/// Similar to [DdwafObj], but all the memory from pointers stored in the object
+/// are owned by the WAF itself.
 pub struct WafOwnedDdwafObj {
     _inner: std::mem::ManuallyDrop<DdwafObj>,
 }
@@ -1616,15 +1690,18 @@ impl DerefMut for WafOwnedDdwafObj {
     }
 }
 
+/// Returns the version of the underlying `libddwaf` library.
 pub fn get_version() -> &'static CStr {
     unsafe { CStr::from_ptr(bindings::ddwaf_get_version()) }
 }
 
+/// The configuration for a new WAF instance.
 pub struct DdwafConfig {
     _cfg: bindings::ddwaf_config,
     obfuscator: Obfuscator,
 }
 impl DdwafConfig {
+    /// Creates a new [DdwafConfig] with the provided [Limits] and [Obfuscator].
     pub fn new(limits: Limits, obfuscator: Obfuscator) -> Self {
         Self {
             _cfg: bindings::ddwaf_config {
@@ -1661,6 +1738,11 @@ impl Default for Limits {
     }
 }
 
+/// Obfuscation configuration for the WAF.
+///
+/// This is effectively a pair of regular expressions that are respectively used
+/// to determine which key and value data to obfuscate when producing WAF
+/// outputs.
 pub struct Obfuscator {
     _raw_obfuscator: bindings::_ddwaf_config__ddwaf_config_obfuscator,
 }
@@ -1671,6 +1753,8 @@ impl Default for Obfuscator {
     }
 }
 impl Obfuscator {
+    /// Creates a new [Obfuscator] with the provided key and value regular
+    /// expressions.
     pub fn new<T: Into<Vec<u8>>, U: Into<Vec<u8>>>(
         key_regex: Option<T>,
         value_regex: Option<U>,
@@ -1689,6 +1773,8 @@ impl Obfuscator {
         }
     }
 
+    /// Returns the regular expression used to determine key data to be
+    /// obfuscated, if one has been set.
     pub fn key_regex(&self) -> Option<&CStr> {
         if self._raw_obfuscator.key_regex.is_null() {
             None
@@ -1697,6 +1783,8 @@ impl Obfuscator {
         }
     }
 
+    /// Returns the regular expression used to determine value data to be
+    /// obfuscated, if one has been set.
     pub fn value_regex(&self) -> Option<&CStr> {
         if self._raw_obfuscator.value_regex.is_null() {
             None
@@ -1728,6 +1816,10 @@ impl Drop for Obfuscator {
     }
 }
 
+/// A fully configured WAF instance.
+///
+/// This can be used to obtain [WafContext]s that use the underlying instance's
+/// configuration.
 pub struct WafInstance {
     _handle: bindings::ddwaf_handle,
     _config: Option<DdwafConfig>, // for holding memory only
@@ -1743,6 +1835,12 @@ unsafe impl Send for WafInstance {}
 unsafe impl Sync for WafInstance {}
 
 impl WafInstance {
+    /// Creates a new [WafInstance] from the provided ruleset and configuration,
+    /// and stores any diagnostics produced in the process in the provided
+    /// [WafOwnedDdwafObj] if one is provided.
+    ///
+    /// The [DdwafBuilder] interface is more efficient for situations where the
+    /// WAF's configuration needs to be regularly updated.
     pub fn new<T: AsRef<bindings::ddwaf_object>>(
         ruleset: &T,
         config: DdwafConfig,
@@ -1767,6 +1865,7 @@ impl WafInstance {
         })
     }
 
+    /// Creates a new [WafContext] from this instance.
     pub fn create_context(&self) -> WafContext {
         WafContext {
             _ctx: unsafe { bindings::ddwaf_context_init(self._handle) },
@@ -1774,10 +1873,13 @@ impl WafInstance {
         }
     }
 
+    /// Returns the list of actions that may be produced by this instance's
+    /// ruleset.
     pub fn known_actions(&mut self) -> Vec<&CStr> {
         self.call_c_str_arr_fun(bindings::ddwaf_known_actions)
     }
 
+    /// Returns the list of addresses that are used by this instance's ruleset.
     pub fn known_addresses(&mut self) -> Vec<&CStr> {
         self.call_c_str_arr_fun(bindings::ddwaf_known_addresses)
     }
@@ -1802,11 +1904,15 @@ impl WafInstance {
     }
 }
 
+/// A WAF Context that can be used to evaluate the configured ruleset against
+/// attributes.
 pub struct WafContext {
     _ctx: bindings::ddwaf_context,
     _owned_objs: Vec<DdwafObjMap>,
 }
 impl WafContext {
+    /// Evaluates the configured ruleset against the provided attributes and
+    /// returns the result of this evaluation.
     pub fn run(
         &mut self,
         mut persistent_data: Option<DdwafObjMap>,
@@ -1826,7 +1932,7 @@ impl WafContext {
                 self._ctx,
                 persistent_ref as *mut bindings::ddwaf_object,
                 ephemeral_ref as *mut bindings::ddwaf_object,
-                dres.as_mut_ptr() as *mut bindings::ddwaf_result,
+                dres.as_mut_ptr() as *mut bindings::ddwaf_object,
                 timeout.as_micros().try_into().unwrap_or(u64::MAX),
             )
         };
@@ -1890,15 +1996,35 @@ pub unsafe fn set_log_cb<
     }
 }
 
+/// Logging levels supported by the WAF.
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DdwafLogLevel {
+    /// Extremely detailed logging.
     Trace = bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_TRACE,
+    /// Detailed logging.
     Debug = bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_DEBUG,
+    /// Informational logging.
     Info = bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_INFO,
+    /// Log only warnings and errors.
     Warn = bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_WARN,
+    /// Log only errors.
     Error = bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_ERROR,
+    /// Do not log anything.
     Off = bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_OFF,
+}
+
+impl std::fmt::Display for DdwafLogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Trace => write!(f, "TRACE"),
+            Self::Debug => write!(f, "DEBUG"),
+            Self::Info => write!(f, "INFO"),
+            Self::Warn => write!(f, "WARN"),
+            Self::Error => write!(f, "ERROR"),
+            Self::Off => write!(f, "OFF"),
+        }
+    }
 }
 
 impl TryFrom<u32> for DdwafLogLevel {
@@ -1949,60 +2075,105 @@ extern "C" fn bridge_log_cb(
     }
 }
 
+/// The result of the [WafContext::run] operation.
 #[derive(Debug)]
 pub enum WafRunResult {
+    /// The WAF encountered an internal error while processing the request.
     InternalError,
+    /// The WAF encountered an invalid object while processing the request.
     InvalidObject,
+    /// The WAF encountered an invalid argument while processing the request.
     InvalidArgument,
+    /// The WAF successfully processed the request.
     Ok(DdwafResult),
+    /// The WAF successfully processed the request and some event rules matched
+    /// some of the supplied address data.
     Match(DdwafResult),
 }
 
+/// The result of a successful [WafContext::run] operation.
 #[repr(C)]
 pub struct DdwafResult {
-    _result: bindings::ddwaf_result,
+    _result: WafOwnedDdwafObj,
 }
 impl DdwafResult {
+    /// Returns true if the WAF could not process the entire request in the
+    /// allowed time.
     pub fn is_timeout(&self) -> bool {
-        self._result.timeout
-    }
-    pub fn events(&self) -> &DdwafObjArray {
-        // ddwaf_result does not escape without having been written
-        // (no public methods to construct it), so this is guaranteed
-        // (to the outside) to be an array
-        unsafe { self._result.events.unchecked_as_ref() }
+        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+        match res.get(b"timeout") {
+            Some(val) => val.to_bool().expect("Expected a boolean"),
+            None => false,
+        }
     }
 
-    pub fn actions(&self) -> &DdwafObjMap {
-        unsafe { self._result.actions.unchecked_as_ref() }
+    /// The list of events that have been triggered by this WAF run.
+    pub fn events(&self) -> Option<&DdwafObjArray> {
+        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+        res.get(b"events").map(|o| o.as_type().expect("Expected an array"))
     }
 
-    pub fn derivatives(&self) -> &DdwafObjMap {
-        unsafe { self._result.derivatives.unchecked_as_ref() }
+    /// The list of actions that have been triggered by this WAF run.
+    pub fn actions(&self) -> Option<&DdwafObjMap> {
+        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+        res.get(b"actions").map(|o| o.as_type().expect("Expected a map"))
     }
 
+    #[deprecated(note = "Use attributes instead")]
+    pub fn derivatives(&self) -> Option<&DdwafObjMap> {
+        self.attributes()
+    }
+
+    /// The list of attributes that have been produced by this WAF run and must
+    /// be attached to the surrounding trace.
+    pub fn attributes(&self) -> Option<&DdwafObjMap> {
+        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+        res.get(b"attributes").map(|o| o.as_type().expect("Expected a map"))
+    }
+
+    #[deprecated(note = "Use duration instead")]
     pub fn runtime(&self) -> std::time::Duration {
-        std::time::Duration::from_nanos(self._result.total_runtime)
+        self.duration()
     }
-}
-impl Drop for DdwafResult {
-    fn drop(&mut self) {
-        unsafe { bindings::ddwaf_result_free(&mut self._result) }
+
+    /// The total duration of the WAF run; excluding bindings overhead.
+    pub fn duration(&self) -> std::time::Duration {
+        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+        match res.get(b"duration") {
+            Some(val) => std::time::Duration::from_nanos(val.as_type::<DdwafObjUnsignedInt>().expect("Expected an unsigned integer").value()),
+            None => std::time::Duration::default(),
+        }
+    }
+
+    /// Returns true if the WAF determined that the trace surrounding this
+    /// request should have its priority overridden so that it is always
+    /// retained.
+    pub fn keep(&self) -> bool {
+        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+        match res.get(b"keep") {
+            Some(val) => val.to_bool().expect("Expected a boolean"),
+            None => false,
+        }
     }
 }
 impl std::fmt::Debug for DdwafResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let inner = self._result;
         f.debug_struct("DdwafResult")
-            .field("timeout", &inner.timeout)
-            .field("events", self.events())
-            .field("actions", self.actions())
-            .field("derivatives", self.derivatives())
-            .field("total_runtime", &self.runtime())
+            .field("timeout", &self.is_timeout())
+            .field("keep", &self.keep())
+            .field("duration", &self.duration())
+            .field("events", &self.events())
+            .field("actions", &self.actions())
+            .field("attributes", &self.attributes())
             .finish()
     }
 }
 
+/// A builder for [WafInstance]s.
+///
+/// This is used to maintain a live view over mutable configuration, and is best
+/// suited for cases where the WAF's configuration evolves regularly, such as
+/// through remote configuration.
 pub struct DdwafBuilder {
     _builder: bindings::ddwaf_builder,
     _config: DdwafConfig, // for holding memory only
@@ -2013,6 +2184,7 @@ unsafe impl Send for DdwafBuilder {}
 // SAFETY: changes are only made through exclusive references
 unsafe impl Sync for DdwafBuilder {}
 impl DdwafBuilder {
+    /// Creates a new [DdwafBuilder] from the provided options.
     pub fn new(config: Option<DdwafConfig>) -> Result<Self, DdwafGenericError> {
         let config = config.unwrap_or_default();
         let builder = DdwafBuilder {
@@ -2027,6 +2199,11 @@ impl DdwafBuilder {
         }
     }
 
+    /// Adds or updates the configuration for the given path using the provided
+    /// ruleset; and stores any diagnostics produced in the process in the
+    /// provided [WafOwnedDdwafObj] if one is provided.
+    ///
+    /// Returns true if the configuration was successfully added or updated.
     pub fn add_or_update_config(
         &mut self,
         path: &[u8],
@@ -2047,6 +2224,7 @@ impl DdwafBuilder {
         }
     }
 
+    /// Builds a new [WafInstance] from the current configuration.
     pub fn build_instance(&mut self) -> Result<WafInstance, DdwafGenericError> {
         let raw_instance = unsafe { bindings::ddwaf_builder_build_instance(self._builder) };
         if raw_instance.is_null() {
@@ -2060,6 +2238,9 @@ impl DdwafBuilder {
         })
     }
 
+    /// Removes the configuration for the given path.
+    ///
+    /// Returns true if some configuration was actually removed.
     pub fn remove_config(&mut self, path: &[u8]) -> bool {
         unsafe {
             bindings::ddwaf_builder_remove_config(
@@ -2070,6 +2251,8 @@ impl DdwafBuilder {
         }
     }
 
+    /// Returns the number of configuration paths that match the provided
+    /// filter regular expression.
     pub fn count_config_paths(&mut self, filter: &[u8]) -> u32 {
         unsafe {
             bindings::ddwaf_builder_get_config_paths(
@@ -2081,6 +2264,8 @@ impl DdwafBuilder {
         }
     }
 
+    /// Returns the list of configuration paths that match the provided filter
+    /// regular expression.
     pub fn get_config_paths(&mut self, filter: &[u8]) -> WafOwnedDdwafObj {
         let mut res = WafOwnedDdwafObj::default();
         unsafe {
@@ -2100,8 +2285,10 @@ impl Drop for DdwafBuilder {
     }
 }
 
-// A WAF instance that can be shared (through clone())  and updated by any thread.
-// More performant alternatives exist, with better reclamation strategies
+/// A WAF instance that can be shared (through [Clone::clone]) and updated by
+/// any thread.
+///
+/// More performant alternatives exist, with better reclamation strategies
 pub struct UpdateableWafInstance {
     inner: Arc<UpdateableWafInstanceInner>,
 }
@@ -2234,10 +2421,9 @@ mod tests {
 
     use crate::*;
 
-    #[cfg(not(miri))]
     #[test]
     fn test_get_version() {
-        println!("libddwaf version: {:?}", get_version());
+        assert_eq!(env!("CARGO_PKG_VERSION"), get_version().to_str().expect("Failed to convert version to str"));
     }
 
     #[test]

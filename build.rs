@@ -99,6 +99,9 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=build.rs");
 
+    #[cfg(target_os = "macos")]
+    println!("cargo::rustc-link-lib=c++");
+
     // Generate bindings with bindgen
     let bindings = bindgen::Builder::default()
         .header(include_dir.join("ddwaf.h").to_str().unwrap())
