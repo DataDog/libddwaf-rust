@@ -1,7 +1,11 @@
 use std::env;
-use std::fs;
+use std::fs::{self, File};
+use std::io;
 use std::path::PathBuf;
-use std::process::Command;
+
+use flate2::read::GzDecoder;
+use reqwest::blocking::get;
+use tar::Archive;
 
 fn main() {
     // Read the Rust crate version from the environment variable set by Cargo
@@ -32,41 +36,39 @@ fn main() {
     // Output directory
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let download_dir = out_dir.join("libddwaf_download");
-    let extract_path = download_dir.join("extracted");
-    let include_dir = extract_path.join("include");
-    let lib_dir = extract_path.join("lib");
-
-    // Ensure the download directory exists
-    fs::create_dir_all(&download_dir).expect("Failed to create download directory");
-
-    // Path to the downloaded archive
-    let archive_path = download_dir.join(&archive_name);
+    let include_dir = download_dir.join("include");
+    let lib_dir = download_dir.join("lib");
 
     // Download the archive
-    if !archive_path.exists() {
-        println!("Downloading {}", archive_url);
-        let status = Command::new("curl")
-            .args(["-Lf", "-o", archive_path.to_str().unwrap(), &archive_url])
-            .status()
-            .expect("Failed to execute curl");
-        assert!(status.success(), "Failed to download {}", archive_url);
-    }
+    let archive = get(&archive_url).expect("Failed to download archive");
 
     // Extract the archive
-    if !extract_path.exists() {
-        println!("Extracting {:?}", archive_path);
-        fs::create_dir_all(&extract_path).expect("Failed to create extraction directory");
-        let status = Command::new("tar")
-            .args([
-                "--strip-components=1",
-                "-xzf",
-                archive_path.to_str().unwrap(),
-                "-C",
-                extract_path.to_str().unwrap(),
-            ])
-            .status()
-            .expect("Failed to execute tar");
-        assert!(status.success(), "Failed to extract {}", archive_name);
+    if !include_dir.exists() || !lib_dir.exists() {
+        println!("Extracting {:?}", &archive_url);
+        fs::create_dir_all(&download_dir).expect("Failed to create extraction directory");
+
+        let reader = GzDecoder::new(archive);
+        let mut tar = Archive::new(reader);
+        for entry in tar.entries().expect("Failed to get tar archive entries") {
+            let mut entry = entry.expect("Failed to get tar archive entry");
+            if entry.header().entry_type().is_dir() {
+                continue;
+            }
+
+            let path = entry.path().expect("Failed to get tar archive entry path");
+            let mut components = path.components();
+            if components.next().is_none() {
+                continue;
+            }
+            let out_path = download_dir.join(components.as_path());
+            let out_dir = out_path
+                .parent()
+                .expect("Failed to compute dir name of output file");
+            fs::create_dir_all(out_dir).expect("Failed to create directory for archive entry");
+            let mut file = File::create(out_path).expect("Failed to create file for archive entry");
+            io::copy(&mut entry, &mut file)
+                .expect("Failed to write archive entry contents to file");
+        }
     }
 
     // Check the extracted contents
@@ -108,7 +110,7 @@ fn main() {
     // Write the bindings to the output directory
     let bindings_out_path = out_dir.join("bindings.rs");
     bindings
-        .write_to_file(&bindings_out_path)
+        .write_to_file(bindings_out_path)
         .expect("Failed to write bindings.rs");
 
     println!(
