@@ -1,0 +1,142 @@
+use std::ptr::null_mut;
+
+use crate::object::{AsRawMutObject, WAFArray, WAFObject, WAFOwned};
+use crate::{Config, Handle};
+
+/// A builder for [Handle]s.
+///
+/// This is used to maintain a live view over mutable configuration, and is best
+/// suited for cases where the WAF's configuration evolves regularly, such as
+/// through remote configuration.
+#[repr(transparent)]
+pub struct Builder {
+    _builder: crate::bindings::ddwaf_builder,
+}
+impl Builder {
+    /// Creates a new [Builder] instance using the provided [Config]. Returns [None] if the
+    /// builder's initialization fails.
+    #[must_use]
+    pub fn new(config: &Config) -> Option<Self> {
+        let builder = Builder {
+            _builder: unsafe { crate::bindings::ddwaf_builder_init(&config.raw) },
+        };
+        if builder._builder.is_null() {
+            return None;
+        }
+        Some(builder)
+    }
+
+    /// Adds or updates the configuration for the given path.
+    ///
+    /// Returns true if the ruleset was successfully added or updated. Any warning/error information
+    /// is conveyed through the provided diagnostics object.
+    ///
+    /// # Panics
+    /// Panics if the provided `path` is longer than [`u32::MAX`] bytes.
+    #[must_use]
+    pub fn add_or_update_config(
+        &mut self,
+        path: &str,
+        ruleset: &impl AsRef<crate::bindings::ddwaf_object>,
+        diagnostics: Option<&mut WAFOwned<WAFObject>>,
+    ) -> bool {
+        debug_assert!(
+            !path.is_empty(),
+            concat!(
+                "path cannot be empty (",
+                stringify!(bindings::ddwaf_builder_add_or_update_config),
+                " would always fail)"
+            )
+        );
+        let path_len = u32::try_from(path.len()).expect("path is too long");
+        unsafe {
+            crate::bindings::ddwaf_builder_add_or_update_config(
+                self._builder,
+                path.as_ptr().cast(),
+                path_len,
+                ruleset.as_ref(),
+                diagnostics.map_or(null_mut(), |o| std::ptr::from_mut(o.as_raw_mut()).cast()),
+            )
+        }
+    }
+
+    /// Removes the configuration for the given path if some exists.
+    ///
+    /// Returns true if some configuration was indeed removed.
+    ///
+    /// # Panics
+    /// Panics if the provided `path` is longer than [`u32::MAX`] bytes.
+    pub fn remove_config(&mut self, path: &str) -> bool {
+        let path_len = u32::try_from(path.len()).expect("path is too long");
+        unsafe {
+            crate::bindings::ddwaf_builder_remove_config(
+                self._builder,
+                path.as_ptr().cast(),
+                path_len,
+            )
+        }
+    }
+
+    /// Returns the number of configuration paths currently loaded in this [Builder], optionally
+    /// filtered by a regular expression.
+    ///
+    /// # Panics
+    /// Panics if the provided `filter` regular expression is longer than [`u32::MAX`] bytes.
+    #[must_use]
+    pub fn config_paths_count(&self, filter: Option<&'_ str>) -> u32 {
+        let filter = filter.unwrap_or("");
+        let filter_len = u32::try_from(filter.len()).expect("filter is too long");
+        unsafe {
+            crate::bindings::ddwaf_builder_get_config_paths(
+                self._builder,
+                null_mut(),
+                filter.as_ptr().cast(),
+                filter_len,
+            )
+        }
+    }
+
+    /// Returns the configuration paths currently loaded in this [Builder], optionally filtered by
+    /// a regular expression.
+    ///
+    /// # Panics
+    /// Panics if the provided `filter` regular expression is longer than [`u32::MAX`] bytes.
+    #[must_use]
+    pub fn config_paths(&self, filter: Option<&'_ str>) -> WAFOwned<WAFArray> {
+        let mut res = WAFOwned::<WAFArray>::default();
+        let filter = filter.unwrap_or("");
+        let filter_len = u32::try_from(filter.len()).expect("filter is too long");
+        let _ = unsafe {
+            crate::bindings::ddwaf_builder_get_config_paths(
+                self._builder,
+                res.as_raw_mut(),
+                filter.as_ptr().cast(),
+                filter_len,
+            )
+        };
+        res
+    }
+
+    /// Builds a new [Handle] from the current configuration in this [Builder].
+    ///
+    /// Returns [None] if the builder fails to create a new [Handle], meaning the current
+    /// configuration contains no active instructions (no rules nor processors are available).
+    #[must_use]
+    pub fn build(&self) -> Option<Handle> {
+        let raw = unsafe { crate::bindings::ddwaf_builder_build_instance(self._builder) };
+        if raw.is_null() {
+            return None;
+        }
+        Some(Handle { raw })
+    }
+}
+impl Drop for Builder {
+    fn drop(&mut self) {
+        unsafe { crate::bindings::ddwaf_builder_destroy(self._builder) }
+    }
+}
+
+// SAFETY: no thread-local data and no data can be changed under us if we have an owning handle
+unsafe impl Send for Builder {}
+// SAFETY: changes are only made through exclusive references
+unsafe impl Sync for Builder {}

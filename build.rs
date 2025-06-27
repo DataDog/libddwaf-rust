@@ -81,7 +81,7 @@ fn main() {
         "cargo:rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
-    if cfg!(not(feature = "shared_lib")) {
+    if cfg!(feature = "static") {
         println!("cargo:rustc-link-lib=static=ddwaf");
     } else {
         println!("cargo:rustc-link-lib=dylib=ddwaf");
@@ -107,6 +107,8 @@ fn main() {
         .header(include_dir.join("ddwaf.h").to_str().unwrap())
         .blocklist_type(".*pthread.*")
         .clang_arg(format!("-I{}", include_dir.to_str().unwrap()))
+        .default_visibility(bindgen::FieldVisibilityKind::PublicCrate)
+        .derive_default(true)
         .generate()
         .expect("Failed to generate bindings");
 
