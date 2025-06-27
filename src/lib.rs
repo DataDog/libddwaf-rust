@@ -41,7 +41,7 @@
 //! };
 //! match waf_ctx.run(Some(data), None, std::time::Duration::from_millis(1)) {
 //!     WafRunResult::Match(res) => {
-//!         assert!(!res.is_timeout());
+//!         assert!(!res.timeout());
 //!         assert!(res.keep());
 //!         assert!(res.duration() >= std::time::Duration::default());
 //!         assert_eq!(res.events().expect("Expected events").len(), 1);
@@ -60,10 +60,7 @@ use std::{
     mem::MaybeUninit,
     ops::{Deref, DerefMut, Fn, Index, IndexMut},
     ptr::{null, null_mut, NonNull},
-    sync::{Arc, Mutex},
 };
-
-use arc_swap::ArcSwap;
 
 #[cfg(feature = "serde")]
 pub mod serde;
@@ -2099,8 +2096,11 @@ pub struct DdwafResult {
 impl DdwafResult {
     /// Returns true if the WAF could not process the entire request in the
     /// allowed time.
-    pub fn is_timeout(&self) -> bool {
-        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+    pub fn timeout(&self) -> bool {
+        let res = self
+            ._result
+            .as_type::<DdwafObjMap>()
+            .expect("Expected a map");
         match res.get(b"timeout") {
             Some(val) => val.to_bool().expect("Expected a boolean"),
             None => false,
@@ -2109,38 +2109,47 @@ impl DdwafResult {
 
     /// The list of events that have been triggered by this WAF run.
     pub fn events(&self) -> Option<&DdwafObjArray> {
-        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
-        res.get(b"events").map(|o| o.as_type().expect("Expected an array"))
+        let res = self
+            ._result
+            .as_type::<DdwafObjMap>()
+            .expect("Expected a map");
+        res.get(b"events")
+            .map(|o| o.as_type().expect("Expected an array"))
     }
 
     /// The list of actions that have been triggered by this WAF run.
     pub fn actions(&self) -> Option<&DdwafObjMap> {
-        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
-        res.get(b"actions").map(|o| o.as_type().expect("Expected a map"))
-    }
-
-    #[deprecated(note = "Use attributes instead")]
-    pub fn derivatives(&self) -> Option<&DdwafObjMap> {
-        self.attributes()
+        let res = self
+            ._result
+            .as_type::<DdwafObjMap>()
+            .expect("Expected a map");
+        res.get(b"actions")
+            .map(|o| o.as_type().expect("Expected a map"))
     }
 
     /// The list of attributes that have been produced by this WAF run and must
     /// be attached to the surrounding trace.
     pub fn attributes(&self) -> Option<&DdwafObjMap> {
-        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
-        res.get(b"attributes").map(|o| o.as_type().expect("Expected a map"))
-    }
-
-    #[deprecated(note = "Use duration instead")]
-    pub fn runtime(&self) -> std::time::Duration {
-        self.duration()
+        let res = self
+            ._result
+            .as_type::<DdwafObjMap>()
+            .expect("Expected a map");
+        res.get(b"attributes")
+            .map(|o| o.as_type().expect("Expected a map"))
     }
 
     /// The total duration of the WAF run; excluding bindings overhead.
     pub fn duration(&self) -> std::time::Duration {
-        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+        let res = self
+            ._result
+            .as_type::<DdwafObjMap>()
+            .expect("Expected a map");
         match res.get(b"duration") {
-            Some(val) => std::time::Duration::from_nanos(val.as_type::<DdwafObjUnsignedInt>().expect("Expected an unsigned integer").value()),
+            Some(val) => std::time::Duration::from_nanos(
+                val.as_type::<DdwafObjUnsignedInt>()
+                    .expect("Expected an unsigned integer")
+                    .value(),
+            ),
             None => std::time::Duration::default(),
         }
     }
@@ -2149,7 +2158,10 @@ impl DdwafResult {
     /// request should have its priority overridden so that it is always
     /// retained.
     pub fn keep(&self) -> bool {
-        let res = self._result.as_type::<DdwafObjMap>().expect("Expected a map");
+        let res = self
+            ._result
+            .as_type::<DdwafObjMap>()
+            .expect("Expected a map");
         match res.get(b"keep") {
             Some(val) => val.to_bool().expect("Expected a boolean"),
             None => false,
@@ -2159,7 +2171,7 @@ impl DdwafResult {
 impl std::fmt::Debug for DdwafResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DdwafResult")
-            .field("timeout", &self.is_timeout())
+            .field("timeout", &self.timeout())
             .field("keep", &self.keep())
             .field("duration", &self.duration())
             .field("events", &self.events())
@@ -2285,86 +2297,6 @@ impl Drop for DdwafBuilder {
     }
 }
 
-/// A WAF instance that can be shared (through [Clone::clone]) and updated by
-/// any thread.
-///
-/// More performant alternatives exist, with better reclamation strategies
-pub struct UpdateableWafInstance {
-    inner: Arc<UpdateableWafInstanceInner>,
-}
-struct UpdateableWafInstanceInner {
-    builder: Mutex<DdwafBuilder>,
-    waf_instance: ArcSwap<WafInstance>,
-}
-impl UpdateableWafInstance {
-    pub const INITIAL_RULESET: &'static [u8] = b"<initial_ruleset>";
-
-    pub fn new(
-        ruleset: &impl AsRef<bindings::ddwaf_object>,
-        config: Option<DdwafConfig>,
-        diagnostics: Option<&mut WafOwnedDdwafObj>,
-    ) -> Result<Self, DdwafGenericError> {
-        let mut builder = DdwafBuilder::new(config)?;
-        if !builder.add_or_update_config(Self::INITIAL_RULESET, ruleset, diagnostics) {
-            return Err(
-                "Failed to add initial ruleset (add_or_update_config returned false)".into(),
-            );
-        }
-        let waf = builder.build_instance()?;
-        Ok(Self {
-            inner: Arc::new(UpdateableWafInstanceInner {
-                builder: Mutex::new(builder),
-                waf_instance: ArcSwap::from_pointee(waf),
-            }),
-        })
-    }
-}
-impl Clone for UpdateableWafInstance {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(), // clone outer arc
-        }
-    }
-}
-impl UpdateableWafInstance {
-    pub fn current(&self) -> Arc<WafInstance> {
-        self.inner.waf_instance.load().clone()
-    }
-
-    pub fn add_or_update_config(
-        &self,
-        path: &[u8],
-        ruleset: &impl AsRef<bindings::ddwaf_object>,
-        diagnostics: Option<&mut WafOwnedDdwafObj>,
-    ) -> bool {
-        let mut guard = self.inner.builder.lock().unwrap();
-        guard.add_or_update_config(path, ruleset, diagnostics)
-    }
-
-    pub fn remove_config(&self, path: &[u8]) -> bool {
-        let mut guard = self.inner.builder.lock().unwrap();
-        guard.remove_config(path)
-    }
-
-    pub fn count_config_paths(&self, filter: &[u8]) -> u32 {
-        let mut guard = self.inner.builder.lock().unwrap();
-        guard.count_config_paths(filter)
-    }
-
-    pub fn get_config_paths(&self, filter: &[u8]) -> WafOwnedDdwafObj {
-        let mut guard = self.inner.builder.lock().unwrap();
-        guard.get_config_paths(filter)
-    }
-
-    pub fn update(&self) -> Result<Arc<WafInstance>, DdwafGenericError> {
-        let mut guard = self.inner.builder.lock().unwrap();
-        let new_instance = Arc::new(guard.build_instance()?);
-        let old = self.inner.waf_instance.swap(new_instance.clone());
-        drop(old);
-        Ok(new_instance)
-    }
-}
-
 #[macro_export]
 macro_rules! ddwaf_obj {
     (null) => {
@@ -2423,7 +2355,12 @@ mod tests {
 
     #[test]
     fn test_get_version() {
-        assert_eq!(env!("CARGO_PKG_VERSION"), get_version().to_str().expect("Failed to convert version to str"));
+        assert_eq!(
+            env!("CARGO_PKG_VERSION"),
+            get_version()
+                .to_str()
+                .expect("Failed to convert version to str")
+        );
     }
 
     #[test]
