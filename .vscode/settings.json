@@ -1,3 +1,7 @@
 {
-    "rust-analyzer.cargo.features": ["serde", "serde_test"]
+    "rust-analyzer.cargo.features": ["serde", "serde_test"],
+    "[rust]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "rust-lang.rust-analyzer"
+    },
 }
