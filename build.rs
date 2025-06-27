@@ -81,7 +81,7 @@ fn main() {
         "cargo:rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
-    if cfg!(feature = "static_lib") {
+    if cfg!(not(feature = "shared_lib")) {
         println!("cargo:rustc-link-lib=static=ddwaf");
     } else {
         println!("cargo:rustc-link-lib=dylib=ddwaf");
@@ -98,6 +98,9 @@ fn main() {
         println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path");
     }
     println!("cargo:rerun-if-changed=build.rs");
+
+    #[cfg(target_os = "macos")]
+    println!("cargo::rustc-link-lib=c++");
 
     // Generate bindings with bindgen
     let bindings = bindgen::Builder::default()

@@ -3,17 +3,13 @@
 
 use std::{
     ffi::CStr,
-    sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
-        Arc, Mutex, Once,
-    },
-    thread::{self, sleep},
+    sync::{Arc, Mutex, Once},
     time::Duration,
 };
 
 use libddwaf::{
-    ddwaf_obj_map, CommonDdwafObj, DdwafConfig, DdwafLogLevel, DdwafObj, DdwafObjArray,
-    DdwafObjMap, DdwafObjType, UpdateableWafInstance, WafInstance, WafOwnedDdwafObj, WafRunResult,
+    CommonDdwafObj, DdwafConfig, DdwafLogLevel, DdwafObj, DdwafObjArray, DdwafObjMap, DdwafObjType,
+    WafInstance, WafOwnedDdwafObj, WafRunResult,
 };
 
 const ARACHNI_RULE: &str = r#"
@@ -119,9 +115,11 @@ fn basic_run_rule() {
 
     match res {
         WafRunResult::Match(result) => {
-            assert!(!result.is_timeout());
+            assert!(!result.timeout());
+            assert!(result.keep());
+            assert!(result.duration() > Duration::default());
 
-            let events = result.events();
+            let events = result.events().expect("Expected some events");
             assert_eq!(events.len(), 1);
             let first_event: &DdwafObjMap = events[0].as_type().unwrap();
             let rule_first_event: &DdwafObjMap =
@@ -132,7 +130,7 @@ fn basic_run_rule() {
             );
         }
         _ => {
-            panic!("Unexpected result");
+            panic!("Unexpected result: {res:?}");
         }
     }
 }
@@ -189,113 +187,4 @@ fn run_rule_threaded() {
         .collect();
 
     t.into_iter().for_each(|t| t.join().unwrap());
-}
-
-const DISABLE_ARACHNI_RULE_PATH: &[u8] = b"disable_arachni";
-const DISABLE_ARACHNI_RULE: &str = r#"
-{
-    "rules_override": [
-        {
-            "rules_target": [
-                {
-                    "rule_id": "arachni_rule"
-                }
-            ],
-            "enabled": false
-        }
-    ]
-}
-"#;
-
-#[test]
-fn threaded_updateable_waf_instance() {
-    init();
-
-    let ruleset: DdwafObj = serde_json::from_str(ARACHNI_RULE).unwrap();
-    let upd_waf = UpdateableWafInstance::new(&ruleset, None, None).unwrap();
-
-    // add a second rule because it's forbidden to have no rules
-    let ruleset2: DdwafObj = serde_json::from_str(
-        &ARACHNI_RULE
-            .replace("Arachni", "Inhcara")
-            .replace("arachni_rule", "inhcara_rule"),
-    )
-    .unwrap();
-    upd_waf.add_or_update_config(b"2nd rule", &ruleset2, None);
-
-    assert_eq!(upd_waf.count_config_paths(b"2nd rule"), 1);
-    let paths = upd_waf.get_config_paths(b"2nd rule");
-    let paths: &DdwafObjArray = paths.as_type().unwrap();
-    assert_eq!(paths.len(), 1);
-    assert_eq!(paths[0].to_str().unwrap(), "2nd rule");
-
-    let update_thread = std::thread::spawn({
-        let upd_waf_copy = upd_waf.clone();
-        let disable_ruleset: DdwafObj = serde_json::from_str(DISABLE_ARACHNI_RULE).unwrap();
-        move || {
-            let mut disable_next = true;
-            for _ in 0..10 {
-                sleep(Duration::from_millis(100));
-                if disable_next {
-                    let res = upd_waf_copy.add_or_update_config(
-                        DISABLE_ARACHNI_RULE_PATH,
-                        &disable_ruleset,
-                        None,
-                    );
-                    if !res {
-                        panic!("add_or_update_config failed");
-                    }
-                    println!("disable");
-                } else {
-                    upd_waf_copy.remove_config(DISABLE_ARACHNI_RULE_PATH);
-                    println!("enable");
-                }
-                upd_waf_copy.update().expect("update did not succeed");
-                disable_next = !disable_next;
-            }
-        }
-    });
-
-    let data = Arc::new(ddwaf_obj_map!((
-        "server.request.headers.no_cookies",
-        ddwaf_obj_map!(("user-agent", "Arachni"))
-    )));
-
-    let stop_signal = &*Box::leak(Box::new(AtomicBool::new(false)));
-    let t: Vec<_> = (0..2)
-        .map(|_| {
-            std::thread::spawn({
-                let upd_waf_copy = upd_waf.clone();
-                let data_copy = data.clone();
-                let mut matches = 0u64;
-                let mut non_matches = 0u64;
-                move || {
-                    while !stop_signal.load(Relaxed) {
-                        let cur_instance = upd_waf_copy.current();
-                        println!("address of instance: {:p}", Arc::as_ptr(&cur_instance));
-                        let mut ctx = cur_instance.create_context();
-                        let res = ctx.run(None, Some(&*data_copy), Duration::from_millis(500));
-                        match res {
-                            WafRunResult::Match(_) => {
-                                matches += 1;
-                            }
-                            _ => non_matches += 1,
-                        };
-                        thread::sleep(Duration::from_millis(20))
-                    }
-                    (matches, non_matches)
-                }
-            })
-        })
-        .collect::<Vec<_>>();
-
-    update_thread.join().unwrap();
-    stop_signal.store(true, Relaxed);
-
-    for jh in t {
-        let (matches, non_matches) = jh.join().unwrap();
-        println!("positive: {matches}, negative: {non_matches}");
-        assert!(matches > 10);
-        assert!(non_matches > 10);
-    }
 }
