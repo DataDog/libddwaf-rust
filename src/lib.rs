@@ -5,7 +5,7 @@ use std::{
     fmt::Write,
     mem::MaybeUninit,
     ops::{Deref, DerefMut, Fn, Index, IndexMut},
-    ptr::{addr_of_mut, null, null_mut, NonNull},
+    ptr::{null, null_mut, NonNull},
     sync::{Arc, Mutex},
 };
 
@@ -372,29 +372,24 @@ where
                     raw_self.parameterNameLength as usize,
                 )
             };
-            s += &format!("{:?}", fmt_bin(key));
-            s += ": ";
+            s += &format!("{:?}: ", fmt_bin(key));
         }
         match self.get_type() {
             DdwafObjType::String => {
                 let sobj = unsafe { self.as_ref().unchecked_as_ref::<DdwafObjString>() };
-                s += &format!("\"{:?}\"", fmt_bin(sobj.as_slice()));
-                s += "\n";
+                s += &format!("\"{:?}\"\n", fmt_bin(sobj.as_slice()));
             }
             DdwafObjType::Unsigned => {
                 let obj = unsafe { self.as_ref().unchecked_as_ref::<DdwafObjUnsignedInt>() };
-                s += &format!("{}", obj.value());
-                s += "\n";
+                s += &format!("{}\n", obj.value());
             }
             DdwafObjType::Signed => {
                 let obj = unsafe { self.as_ref().unchecked_as_ref::<DdwafObjSignedInt>() };
-                s += &format!("{}", obj.value());
-                s += "\n";
+                s += &format!("{}\n", obj.value());
             }
             DdwafObjType::Float => {
                 let obj = unsafe { self.as_ref().unchecked_as_ref::<DdwafObjFloat>() };
-                s += &format!("{}", obj.value());
-                s += "\n";
+                s += &format!("{}\n", obj.value());
             }
             DdwafObjType::Bool => {
                 let obj = unsafe { self.as_ref().unchecked_as_ref::<DdwafObjBool>() };
@@ -408,11 +403,18 @@ where
                 if obj.is_empty() {
                     s += "[]\n";
                 } else {
+                    while s.ends_with(' ') {
+                        s.pop();
+                    }
                     s += "\n";
                     for i in 0..obj.len() {
-                        s.extend(std::iter::repeat(" ").take(indent as usize));
-                        s += "- ";
-                        s += &obj[i].debug_str(indent + 2);
+                        s.extend(std::iter::repeat_n(" ", indent as usize));
+                        s += "-";
+                        let item = &obj[i].debug_str(indent + 2);
+                        if !item.starts_with('\n') {
+                            s += " ";
+                        }
+                        s += item;
                     }
                 }
             }
@@ -421,9 +423,12 @@ where
                 if obj.is_empty() {
                     s += "{}\n";
                 } else {
+                    while s.ends_with(' ') {
+                        s.pop();
+                    }
                     s += "\n";
                     for i in 0..obj.len() {
-                        s.extend(std::iter::repeat(" ").take(indent as usize));
+                        s.extend(std::iter::repeat_n(" ", indent as usize));
                         s += &obj[i].debug_str(indent + 2);
                     }
                 }
@@ -1928,10 +1933,11 @@ extern "C" fn bridge_log_cb(
     message_len: u64,
 ) {
     unsafe {
-        let file = CStr::from_ptr(file);
-        let function = CStr::from_ptr(function);
-        let message = slice::from_raw_parts(message, message_len.try_into().unwrap());
-        if let Some(cb) = &*addr_of_mut!(LOG_CB) {
+        #[allow(static_mut_refs)]
+        if let Some(cb) = &LOG_CB {
+            let file = CStr::from_ptr(file);
+            let function = CStr::from_ptr(function);
+            let message = slice::from_raw_parts(message, message_len.try_into().unwrap());
             cb(
                 DdwafLogLevel::try_from(level).unwrap_or(DdwafLogLevel::Error),
                 file,
@@ -2286,14 +2292,14 @@ mod tests {
 - 42
 - "Hello, world!"
 - 123
-- 
+-
   key 1: "value 1"
   key 2: -2
   key 3: 2
   key 4: 5.2
   key 5: null
   key 6: []
-  key 7: 
+  key 7:
     - true
     - false
 - []
