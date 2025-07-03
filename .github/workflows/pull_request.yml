@@ -1,8 +1,12 @@
+name: Validation
+
 on:
     pull_request:
     merge_group:
     push:
         branches: [master, main]
+
+permissions: read-all
 
 jobs:
     linters:
