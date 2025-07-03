@@ -13,17 +13,23 @@ static mut LOG_CB: Option<LogCallback> = None;
 ///
 /// This function is unsafe because it writes to a static variable without synchronization.
 /// It should only be used during startup.
-pub unsafe fn set_log_cb<F: Fn(LogLevel, &'static CStr, &'static CStr, u32, &[u8]) + 'static>(
-    cb: Option<F>,
+pub unsafe fn set_log_cb(
+    cb: impl Fn(LogLevel, &'static CStr, &'static CStr, u32, &[u8]) + 'static,
     min_level: LogLevel,
 ) {
-    if let Some(cb) = cb {
-        LOG_CB = Some(Box::new(cb));
-        crate::bindings::ddwaf_set_log_cb(Some(bridge_log_cb), min_level.as_raw());
-    } else {
-        crate::bindings::ddwaf_set_log_cb(None, LogLevel::Off.as_raw());
-        LOG_CB = None;
-    }
+    LOG_CB = Some(Box::new(cb));
+    crate::bindings::ddwaf_set_log_cb(Some(bridge_log_cb), min_level.as_raw());
+}
+
+/// Resets the log callback function (to the default of "none").
+///
+/// # Safety
+///
+/// This function is unsafe because it writes to a static variable without synchronization.
+/// It should only be used during startup.
+pub unsafe fn reset_log_cb() {
+    crate::bindings::ddwaf_set_log_cb(None, LogLevel::Off.as_raw());
+    LOG_CB = None;
 }
 
 /// Logging levels supported by the WAF.

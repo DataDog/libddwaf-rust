@@ -28,10 +28,11 @@
 //!     waf_array,
 //!     waf_map,
 //!     Builder,
+//!     Config,
 //!     RunResult,
 //! };
 //!
-//! let mut builder = Builder::new(Default::default())
+//! let mut builder = Builder::new(&Config::default())
 //!     .expect("Failed to build WAF instance");
 //! let rule_set = waf_map!{
 //!     /* Typically obtained by parsing a rules file using the serde feature */
