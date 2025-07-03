@@ -3,8 +3,7 @@
 use std::ffi::CStr;
 use std::{error, fmt, slice};
 
-type LogCallback =
-    Box<dyn Fn(LogLevel, &'static CStr, &'static CStr, u32, &[std::os::raw::c_char])>;
+type LogCallback = Box<dyn Fn(LogLevel, &'static CStr, &'static CStr, u32, &[u8])>;
 
 static mut LOG_CB: Option<LogCallback> = None;
 
@@ -14,9 +13,7 @@ static mut LOG_CB: Option<LogCallback> = None;
 ///
 /// This function is unsafe because it writes to a static variable without synchronization.
 /// It should only be used during startup.
-pub unsafe fn set_log_cb<
-    F: Fn(LogLevel, &'static CStr, &'static CStr, u32, &[std::os::raw::c_char]) + 'static,
->(
+pub unsafe fn set_log_cb<F: Fn(LogLevel, &'static CStr, &'static CStr, u32, &[u8]) + 'static>(
     cb: Option<F>,
     min_level: LogLevel,
 ) {
@@ -114,7 +111,7 @@ extern "C" fn bridge_log_cb(
             let file = CStr::from_ptr(file);
             let function = CStr::from_ptr(function);
             let message =
-                slice::from_raw_parts(message, message_len.try_into().unwrap_or(usize::MAX));
+                slice::from_raw_parts(message.cast(), message_len.try_into().unwrap_or(usize::MAX));
             cb(
                 LogLevel::try_from(level).unwrap_or(LogLevel::Error),
                 file,

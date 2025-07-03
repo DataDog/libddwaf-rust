@@ -1,3 +1,10 @@
+#![warn(
+    clippy::correctness,
+    clippy::pedantic,
+    clippy::perf,
+    clippy::style,
+    clippy::suspicious
+)]
 #![cfg(feature = "serde_test")]
 #![cfg(not(miri))]
 
@@ -7,9 +14,11 @@ use std::{
     time::Duration,
 };
 
+use libddwaf::object::WAFMap;
+use libddwaf::Config;
 use libddwaf::{
     log::LogLevel,
-    object::{WAFArray, WAFMap, WAFObject, WAFObjectType, WAFOwned},
+    object::{WAFArray, WAFObject, WAFOwned},
     Builder, RunResult,
 };
 
@@ -56,9 +65,9 @@ fn log_callback(
     function: &'static CStr,
     file: &'static CStr,
     line: u32,
-    message: &[std::os::raw::c_char],
+    message: &[u8],
 ) {
-    let msg_str = String::from_utf8_lossy(unsafe { &*(message as *const [i8] as *const [u8]) });
+    let msg_str = String::from_utf8_lossy(message);
     eprintln!(
         "[{:-5}] {}:{} ({}) {}",
         level,
@@ -73,7 +82,7 @@ static INIT: Once = Once::new();
 fn init() {
     INIT.call_once(|| {
         unsafe { libddwaf::log::set_log_cb(Some(log_callback), LogLevel::Debug) };
-    })
+    });
 }
 
 #[test]
@@ -81,14 +90,12 @@ fn basic_run_rule() {
     init();
 
     let ruleset: WAFObject = serde_json::from_str(ARACHNI_RULE).unwrap();
-    let mut builder = Builder::new(&Default::default()).expect("Failed to create builder");
-    let mut diagnostics = WAFOwned::<WAFObject>::default();
+    let mut builder = Builder::new(&Config::default()).expect("Failed to create builder");
+    let mut diagnostics = WAFOwned::<WAFMap>::default();
     assert!(builder.add_or_update_config("rules", &ruleset, Some(&mut diagnostics)));
 
-    assert_eq!(diagnostics.get_type(), WAFObjectType::Map);
+    assert!(diagnostics.is_valid());
     let loaded_rule_name = diagnostics
-        .as_type::<WAFMap>()
-        .unwrap()
         .get_str("rules")
         .unwrap()
         .as_type::<WAFMap>()
@@ -139,7 +146,7 @@ fn basic_run_rule() {
 #[test]
 fn test_known_actions() {
     let ruleset: WAFObject = serde_json::from_str(ARACHNI_RULE).unwrap();
-    let mut builder = Builder::new(&Default::default()).expect("Failed to create builder");
+    let mut builder = Builder::new(&Config::default()).expect("Failed to create builder");
     assert!(builder.add_or_update_config("rules", &ruleset, None));
     let waf = Arc::new(builder.build().unwrap());
 
@@ -151,7 +158,7 @@ fn test_known_actions() {
 #[test]
 fn run_rule_threaded() {
     let ruleset: WAFObject = serde_json::from_str(ARACHNI_RULE).unwrap();
-    let mut builder = Builder::new(&Default::default()).expect("Failed to create builder");
+    let mut builder = Builder::new(&Config::default()).expect("Failed to create builder");
     assert!(builder.add_or_update_config("rules", &ruleset, None));
     let waf = Arc::new(builder.build().unwrap());
 

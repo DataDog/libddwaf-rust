@@ -93,15 +93,15 @@ impl Clone for Obfuscator {
         )
     }
 }
+/// The regular expression used by [`Obfuscator::default`] to determine which key data to obfuscate.
+pub const OBFUSCATOR_DEFAULT_KEY_REGEX: &str = r"(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt";
+/// The regular expression used by [`Obfuscator::default`] to determine which value data to obfuscate.
+pub const OBFUSCATOR_DEFAULT_VAL_REGEX: &str = r#"(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})"#;
 impl Default for Obfuscator {
     fn default() -> Self {
         Obfuscator::new(
-            Some(
-                r"(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt",
-            ),
-            Some(
-                r#"(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})"#,
-            ),
+            Some(OBFUSCATOR_DEFAULT_KEY_REGEX),
+            Some(OBFUSCATOR_DEFAULT_VAL_REGEX),
         )
     }
 }
@@ -117,5 +117,67 @@ impl Drop for Obfuscator {
                 drop(CString::from_raw(self.raw.value_regex.cast_mut()));
             }
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn default_obfuscator() {
+        let obfuscator = Obfuscator::default();
+        assert!(obfuscator.key_regex().is_some());
+        assert!(obfuscator.value_regex().is_some());
+    }
+
+    #[test]
+    pub fn key_only_obfuscator() {
+        let obfuscator = Obfuscator::new(Some(".*"), Option::<&str>::None);
+        assert_eq!(
+            obfuscator
+                .key_regex()
+                .map(CStr::to_str)
+                .and_then(Result::ok),
+            Some(".*")
+        );
+        assert!(obfuscator.value_regex().is_none());
+    }
+
+    #[test]
+    pub fn value_only_obfuscator() {
+        let obfuscator = Obfuscator::new(Option::<&str>::None, Some(".*"));
+        assert!(obfuscator.key_regex().is_none());
+        assert_eq!(
+            obfuscator
+                .value_regex()
+                .map(CStr::to_str)
+                .and_then(Result::ok),
+            Some(".*")
+        );
+    }
+
+    #[test]
+    pub fn clone_validity() {
+        let obfuscator = {
+            // Clone from this and let it get dropped.
+            let def = Obfuscator::default();
+            def.clone()
+        };
+        assert_eq!(
+            obfuscator
+                .key_regex()
+                .map(CStr::to_str)
+                .and_then(Result::ok),
+            Some(OBFUSCATOR_DEFAULT_KEY_REGEX)
+        );
+        assert_eq!(
+            obfuscator
+                .value_regex()
+                .map(CStr::to_str)
+                .and_then(Result::ok),
+            Some(OBFUSCATOR_DEFAULT_VAL_REGEX)
+        );
     }
 }

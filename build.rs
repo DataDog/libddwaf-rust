@@ -20,18 +20,18 @@ fn main() {
 
     // Map the target triple to the correct library archive
     let archive_name = match target.as_str() {
-        "x86_64-unknown-linux-gnu" => format!("libddwaf-{}-x86_64-linux-musl.tar.gz", version),
-        "x86_64-unknown-linux-musl" => format!("libddwaf-{}-x86_64-linux-musl.tar.gz", version),
-        "aarch64-unknown-linux-gnu" => format!("libddwaf-{}-aarch64-linux-musl.tar.gz", version),
-        "aarch64-unknown-linux-musl" => format!("libddwaf-{}-aarch64-linux-musl.tar.gz", version),
-        "armv7-unknown-linux-musleabihf" => format!("libddwaf-{}-armv7-linux-musl.tar.gz", version),
-        "aarch64-apple-darwin" => format!("libddwaf-{}-darwin-arm64.tar.gz", version),
-        "x86_64-apple-darwin" => format!("libddwaf-{}-darwin-x86_64.tar.gz", version),
-        _ => panic!("Unsupported target platform: {}", target),
+        "x86_64-unknown-linux-gnu" => format!("libddwaf-{version}-x86_64-linux-musl.tar.gz"),
+        "x86_64-unknown-linux-musl" => format!("libddwaf-{version}-x86_64-linux-musl.tar.gz"),
+        "aarch64-unknown-linux-gnu" => format!("libddwaf-{version}-aarch64-linux-musl.tar.gz"),
+        "aarch64-unknown-linux-musl" => format!("libddwaf-{version}-aarch64-linux-musl.tar.gz"),
+        "armv7-unknown-linux-musleabihf" => format!("libddwaf-{version}-armv7-linux-musl.tar.gz"),
+        "aarch64-apple-darwin" => format!("libddwaf-{version}-darwin-arm64.tar.gz"),
+        "x86_64-apple-darwin" => format!("libddwaf-{version}-darwin-x86_64.tar.gz"),
+        _ => panic!("Unsupported target platform: {target}"),
     };
 
     // Construct the download URL
-    let archive_url = format!("{}/{}/{}", base_url, version, archive_name);
+    let archive_url = format!("{base_url}/{version}/{archive_name}");
 
     // Output directory
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
