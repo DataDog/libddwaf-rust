@@ -23,7 +23,7 @@ tar = "0.4"
 serde_json = "1.0"
 
 [features]
-default = ["serde"]
+default = ["serde", "static"]
 serde = ["dep:serde"]
 static = []
 
