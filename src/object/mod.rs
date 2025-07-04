@@ -1225,7 +1225,7 @@ fn fmt_bin_str(bytes: &[u8]) -> impl fmt::Debug + '_ {
     BinFormatter(bytes)
 }
 
-/// Helper macro to create [`object::WAFObject`]s.
+/// Helper macro to create [`WAFObject`]s.
 #[macro_export]
 macro_rules! waf_object {
     (null) => {
@@ -1236,7 +1236,7 @@ macro_rules! waf_object {
     };
 }
 
-/// Helper macro to create [`object::WAFArray`]s.
+/// Helper macro to create [`WAFArray`]s.
 #[macro_export]
 macro_rules! waf_array {
     () => { $crate::object::WAFArray::new(0) };
@@ -1254,7 +1254,7 @@ macro_rules! waf_array {
     };
 }
 
-/// Helper macro to create [`object::WAFMap`]s.
+/// Helper macro to create [`WAFMap`]s.
 #[macro_export]
 macro_rules! waf_map {
     () => { $crate::object::WAFMap::new(0) };
