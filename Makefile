@@ -1,22 +1,35 @@
-check: test miri clippy format_check
+check: test clippy format_check
 .PHONY: check
 
 test:
-	cargo test --features serde_test
-.PHONY: miri
-
-miri:
-	cargo +nightly miri test --features serde_test
-.PHONY: miri
+	cargo test --all-targets
+.PHONY: test
 
 coverage:
-	cargo tarpaulin --out Html --features serde_test
+	cargo +nightly llvm-cov test --all-targets --branch --quiet --lcov --output-path=target/lcov.info \
+		--fail-under-lines=85
+	cargo +nightly llvm-cov report --html --output-dir=target/coverage
+ifndef GITHUB_STEP_SUMMARY
+	cargo +nightly llvm-cov report --summary-only
+else
+	echo "## Coverage Report"                     >> ${GITHUB_STEP_SUMMARY}
+	echo ""                                       >> ${GITHUB_STEP_SUMMARY}
+	echo '```'                                    >> ${GITHUB_STEP_SUMMARY}
+	cargo +nightly llvm-cov report --summary-only >> ${GITHUB_STEP_SUMMARY}
+	echo '```'                                    >> ${GITHUB_STEP_SUMMARY}
+endif
 .PHONY: coverage
 
 clippy:
-	cargo clippy
+	cargo clippy --all-targets
 .PHONY: clippy
 
 format_check:
 	cargo fmt -- --check
 .PHONY: format_check
+
+Cargo.lock: Cargo.toml
+	cargo check
+
+LICENSE-3rdparty.yml: Cargo.toml Cargo.lock
+	cargo bundle-licenses --format=yaml --output=LICENSE-3rdparty.yml
