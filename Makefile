@@ -18,3 +18,9 @@ clippy:
 format_check:
 	cargo fmt -- --check
 .PHONY: format_check
+
+Cargo.lock: Cargo.toml
+	cargo check
+
+LICENSE-3rdparty.yml: Cargo.toml Cargo.lock
+	cargo bundle-licenses --format=yaml --output=LICENSE-3rdparty.yml
