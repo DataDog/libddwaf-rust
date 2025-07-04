@@ -39,15 +39,15 @@ impl WAFObjectType {
     /// Returns the raw [`bindings::DDWAF_OBJ_TYPE`] value corresponding to this [`WAFObjectType`].
     const fn as_raw(self) -> bindings::DDWAF_OBJ_TYPE {
         match self {
-            WAFObjectType::Invalid => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_INVALID,
-            WAFObjectType::Signed => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_SIGNED,
-            WAFObjectType::Unsigned => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_UNSIGNED,
-            WAFObjectType::String => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING,
-            WAFObjectType::Array => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_ARRAY,
-            WAFObjectType::Map => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_MAP,
-            WAFObjectType::Bool => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_BOOL,
-            WAFObjectType::Float => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_FLOAT,
-            WAFObjectType::Null => bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_NULL,
+            WAFObjectType::Invalid => bindings::DDWAF_OBJ_INVALID,
+            WAFObjectType::Signed => bindings::DDWAF_OBJ_SIGNED,
+            WAFObjectType::Unsigned => bindings::DDWAF_OBJ_UNSIGNED,
+            WAFObjectType::String => bindings::DDWAF_OBJ_STRING,
+            WAFObjectType::Array => bindings::DDWAF_OBJ_ARRAY,
+            WAFObjectType::Map => bindings::DDWAF_OBJ_MAP,
+            WAFObjectType::Bool => bindings::DDWAF_OBJ_BOOL,
+            WAFObjectType::Float => bindings::DDWAF_OBJ_FLOAT,
+            WAFObjectType::Null => bindings::DDWAF_OBJ_NULL,
         }
     }
 }
@@ -55,15 +55,15 @@ impl TryFrom<bindings::DDWAF_OBJ_TYPE> for WAFObjectType {
     type Error = UnknownObjectTypeError;
     fn try_from(value: bindings::DDWAF_OBJ_TYPE) -> Result<Self, UnknownObjectTypeError> {
         match value {
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_INVALID => Ok(WAFObjectType::Invalid),
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_SIGNED => Ok(WAFObjectType::Signed),
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_UNSIGNED => Ok(WAFObjectType::Unsigned),
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING => Ok(WAFObjectType::String),
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_ARRAY => Ok(WAFObjectType::Array),
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_MAP => Ok(WAFObjectType::Map),
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_BOOL => Ok(WAFObjectType::Bool),
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_FLOAT => Ok(WAFObjectType::Float),
-            bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_NULL => Ok(WAFObjectType::Null),
+            bindings::DDWAF_OBJ_INVALID => Ok(WAFObjectType::Invalid),
+            bindings::DDWAF_OBJ_SIGNED => Ok(WAFObjectType::Signed),
+            bindings::DDWAF_OBJ_UNSIGNED => Ok(WAFObjectType::Unsigned),
+            bindings::DDWAF_OBJ_STRING => Ok(WAFObjectType::String),
+            bindings::DDWAF_OBJ_ARRAY => Ok(WAFObjectType::Array),
+            bindings::DDWAF_OBJ_MAP => Ok(WAFObjectType::Map),
+            bindings::DDWAF_OBJ_BOOL => Ok(WAFObjectType::Bool),
+            bindings::DDWAF_OBJ_FLOAT => Ok(WAFObjectType::Float),
+            bindings::DDWAF_OBJ_NULL => Ok(WAFObjectType::Null),
             unknown => Err(UnknownObjectTypeError(unknown)),
         }
     }
@@ -455,7 +455,7 @@ typed_object!(WAFObjectType::Signed => WAFSigned {
     pub const fn new(val: i64) -> Self {
         Self {
             raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_SIGNED,
+                type_: bindings::DDWAF_OBJ_SIGNED,
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { intValue: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
@@ -476,7 +476,7 @@ typed_object!(WAFObjectType::Unsigned => WAFUnsigned {
     pub const fn new (val: u64) -> Self {
         Self {
             raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_UNSIGNED,
+                type_: bindings::DDWAF_OBJ_UNSIGNED,
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { uintValue: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
@@ -503,7 +503,7 @@ typed_object!(WAFObjectType::String => WAFString {
         };
         Self {
             raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING,
+                type_: bindings::DDWAF_OBJ_STRING,
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 {
                     stringValue: ptr,
                 },
@@ -532,7 +532,7 @@ typed_object!(WAFObjectType::String => WAFString {
     /// Returns a slice of the bytes from this [WAFString].
     #[must_use]
     pub fn bytes(&self) -> &[u8] {
-        debug_assert_eq!(self.raw.type_, bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING);
+        debug_assert_eq!(self.raw.type_, bindings::DDWAF_OBJ_STRING);
         let len = self.len();
         if len == 0 {
             return &[];
@@ -569,7 +569,7 @@ typed_object!(WAFObjectType::Array => WAFArray {
         unsafe { std::ptr::write_bytes(array, 0, size)};
         Self {
             raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_ARRAY,
+                type_: bindings::DDWAF_OBJ_ARRAY,
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { array },
                 nbEntries: nb_entries,
                 ..Default::default()
@@ -620,7 +620,7 @@ typed_object!(WAFObjectType::Map => WAFMap {
         unsafe { std::ptr::write_bytes(array, 0, size)};
         Self {
             raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_MAP,
+                type_: bindings::DDWAF_OBJ_MAP,
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 {  array },
                 nbEntries: nb_entries,
                 ..Default::default()
@@ -698,7 +698,7 @@ typed_object!(WAFObjectType::Bool => WAFBool {
     pub const fn new(val: bool) -> Self {
         Self {
             raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_BOOL,
+                type_: bindings::DDWAF_OBJ_BOOL,
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { boolean: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
@@ -719,7 +719,7 @@ typed_object!(WAFObjectType::Float => WAFFloat {
     pub const fn new(val: f64) -> Self {
         Self {
             raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_FLOAT,
+                type_: bindings::DDWAF_OBJ_FLOAT,
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { f64_: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
@@ -739,7 +739,7 @@ typed_object!(WAFObjectType::Null => WAFNull {
     #[must_use]
     pub const fn new() -> Self {
         Self { raw: bindings::ddwaf_object {
-            type_: bindings::DDWAF_OBJ_TYPE_DDWAF_OBJ_NULL,
+            type_: bindings::DDWAF_OBJ_NULL,
             __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { uintValue: 0},
             nbEntries: 0,
             parameterName: null_mut(),

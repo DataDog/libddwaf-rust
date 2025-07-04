@@ -1,0 +1,6 @@
+{
+    "name": "Rust Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile"
+    }
+}

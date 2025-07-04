@@ -52,12 +52,12 @@ pub enum LogLevel {
 impl LogLevel {
     const fn as_raw(self) -> crate::bindings::DDWAF_LOG_LEVEL {
         match self {
-            Self::Trace => crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_TRACE,
-            Self::Debug => crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_DEBUG,
-            Self::Info => crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_INFO,
-            Self::Warn => crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_WARN,
-            Self::Error => crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_ERROR,
-            Self::Off => crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_OFF,
+            Self::Trace => crate::bindings::DDWAF_LOG_TRACE,
+            Self::Debug => crate::bindings::DDWAF_LOG_DEBUG,
+            Self::Info => crate::bindings::DDWAF_LOG_INFO,
+            Self::Warn => crate::bindings::DDWAF_LOG_WARN,
+            Self::Error => crate::bindings::DDWAF_LOG_ERROR,
+            Self::Off => crate::bindings::DDWAF_LOG_OFF,
         }
     }
 }
@@ -78,12 +78,12 @@ impl TryFrom<crate::bindings::DDWAF_LOG_LEVEL> for LogLevel {
 
     fn try_from(value: crate::bindings::DDWAF_LOG_LEVEL) -> Result<Self, UnknownLogLevelError> {
         match value {
-            crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_TRACE => Ok(LogLevel::Trace),
-            crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_DEBUG => Ok(LogLevel::Debug),
-            crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_INFO => Ok(LogLevel::Info),
-            crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_WARN => Ok(LogLevel::Warn),
-            crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_ERROR => Ok(LogLevel::Error),
-            crate::bindings::DDWAF_LOG_LEVEL_DDWAF_LOG_OFF => Ok(LogLevel::Off),
+            crate::bindings::DDWAF_LOG_TRACE => Ok(LogLevel::Trace),
+            crate::bindings::DDWAF_LOG_DEBUG => Ok(LogLevel::Debug),
+            crate::bindings::DDWAF_LOG_INFO => Ok(LogLevel::Info),
+            crate::bindings::DDWAF_LOG_WARN => Ok(LogLevel::Warn),
+            crate::bindings::DDWAF_LOG_ERROR => Ok(LogLevel::Error),
+            crate::bindings::DDWAF_LOG_OFF => Ok(LogLevel::Off),
             unknown => Err(UnknownLogLevelError { raw: unknown }),
         }
     }

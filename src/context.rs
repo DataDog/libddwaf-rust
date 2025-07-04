@@ -48,7 +48,7 @@ impl Context {
             )
         };
         match status {
-            crate::bindings::DDWAF_RET_CODE_DDWAF_ERR_INTERNAL => {
+            crate::bindings::DDWAF_ERR_INTERNAL => {
                 // It's unclear whether the persistent data needs to be kept alive or not, so we
                 // keep it alive to be on the safe side.
                 if let Some(obj) = persistent_data {
@@ -56,20 +56,16 @@ impl Context {
                 }
                 Err(RunError::InternalError)
             }
-            crate::bindings::DDWAF_RET_CODE_DDWAF_ERR_INVALID_OBJECT => {
-                Err(RunError::InvalidObject)
-            }
-            crate::bindings::DDWAF_RET_CODE_DDWAF_ERR_INVALID_ARGUMENT => {
-                Err(RunError::InvalidArgument)
-            }
-            crate::bindings::DDWAF_RET_CODE_DDWAF_OK => {
+            crate::bindings::DDWAF_ERR_INVALID_OBJECT => Err(RunError::InvalidObject),
+            crate::bindings::DDWAF_ERR_INVALID_ARGUMENT => Err(RunError::InvalidArgument),
+            crate::bindings::DDWAF_OK => {
                 // We need to keep the persistent data alive as the WAF may hold references to it.
                 if let Some(obj) = persistent_data {
                     self.keepalive.push(obj);
                 }
                 Ok(RunResult::NoMatch(unsafe { res.assume_init() }))
             }
-            crate::bindings::DDWAF_RET_CODE_DDWAF_MATCH => {
+            crate::bindings::DDWAF_MATCH => {
                 // We need to keep the persistent data alive as the WAF may hold references to it.
                 if let Some(obj) = persistent_data {
                     self.keepalive.push(obj);

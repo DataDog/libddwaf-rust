@@ -41,7 +41,7 @@ impl ddwaf_object {
     /// - The individual elements of the array must be valid [`ddwaf_object`]s that can be dropped
     ///   with [`ddwaf_object::drop_object`].
     pub(crate) unsafe fn drop_array(&mut self) {
-        debug_assert_eq!(self.type_, DDWAF_OBJ_TYPE_DDWAF_OBJ_ARRAY);
+        debug_assert_eq!(self.type_, DDWAF_OBJ_ARRAY);
         if self.nbEntries == 0 {
             return;
         }
@@ -64,7 +64,7 @@ impl ddwaf_object {
     /// - The individual elements of the map must be valid [`ddwaf_object`]s that can be dropped with
     ///   both [`ddwaf_object::drop_object`] and [`ddwaf_object::drop_key`].
     pub(crate) unsafe fn drop_map(&mut self) {
-        debug_assert_eq!(self.type_, DDWAF_OBJ_TYPE_DDWAF_OBJ_MAP);
+        debug_assert_eq!(self.type_, DDWAF_OBJ_MAP);
         if self.nbEntries == 0 {
             return;
         }
@@ -88,9 +88,9 @@ impl ddwaf_object {
     /// methods apply.
     pub(crate) unsafe fn drop_object(&mut self) {
         match self.type_ {
-            DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING => self.drop_string(),
-            DDWAF_OBJ_TYPE_DDWAF_OBJ_ARRAY => self.drop_array(),
-            DDWAF_OBJ_TYPE_DDWAF_OBJ_MAP => self.drop_map(),
+            DDWAF_OBJ_STRING => self.drop_string(),
+            DDWAF_OBJ_ARRAY => self.drop_array(),
+            DDWAF_OBJ_MAP => self.drop_map(),
             _ => { /* nothing to do */ }
         }
     }
@@ -102,7 +102,7 @@ impl ddwaf_object {
     /// - The [`ddwaf_object::__bindgen_anon_1`] field must have a
     ///   [`_ddwaf_object__bindgen_ty_1::stringValue`] set from a raw-converted [`Box<[u8]>`]
     pub(crate) unsafe fn drop_string(&mut self) {
-        debug_assert_eq!(self.type_, DDWAF_OBJ_TYPE_DDWAF_OBJ_STRING);
+        debug_assert_eq!(self.type_, DDWAF_OBJ_STRING);
         let sval = self.__bindgen_anon_1.stringValue;
         if sval.is_null() {
             return;
