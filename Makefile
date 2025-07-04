@@ -6,7 +6,8 @@ test:
 .PHONY: test
 
 coverage:
-	cargo +nightly llvm-cov test --all-targets --branch --quiet --lcov --output-path=target/lcov.info
+	cargo +nightly llvm-cov test --all-targets --branch --quiet --lcov --output-path=target/lcov.info \
+		--fail-under-lines=85
 	cargo +nightly llvm-cov report --html --output-dir=target/coverage
 ifndef GITHUB_STEP_SUMMARY
 	cargo +nightly llvm-cov report --summary-only
