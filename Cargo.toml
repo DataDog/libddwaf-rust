@@ -14,9 +14,9 @@ libc = "0.2"
 serde = { version = "1.0", optional = true }
 
 [build-dependencies]
-bindgen = "0.72.0"
+bindgen = "0.72"
 flate2 = "1.1"
-reqwest = { version = "0.12.22", features = ["blocking"] }
+reqwest = { version = "0.12", features = ["blocking"] }
 tar = "0.4"
 
 [dev-dependencies]
