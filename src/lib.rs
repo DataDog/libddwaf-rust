@@ -50,7 +50,7 @@
 //!         ("on_match", waf_array!{ "block" })
 //!     } }),
 //! };
-//! let mut diagnostics = WAFOwned::<WAFMap>::default();
+//! let mut diagnostics = WafOwned::<WafMap>::default();
 //! if !builder.add_or_update_config("config/file/logical/path", &rule_set, Some(&mut diagnostics)) {
 //!     panic!("Failed to add or update config!");
 //! }

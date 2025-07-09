@@ -1,9 +1,9 @@
 use std::sync::LazyLock;
 
-use libddwaf::object::WAFMap;
+use libddwaf::object::WafMap;
 use libddwaf::{waf_array, waf_map, Builder, Config};
 
-static ARACHNI_RULE: LazyLock<WAFMap> = LazyLock::new(|| {
+static ARACHNI_RULE: LazyLock<WafMap> = LazyLock::new(|| {
     waf_map! {
         ("version", "2.1"),
         ("rules", waf_array![

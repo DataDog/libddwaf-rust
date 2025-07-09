@@ -1,5 +1,5 @@
 use libddwaf::{
-    object::{WAFMap, WAFOwned},
+    object::{WafMap, WafOwned},
     waf_array, waf_map, Builder, Config,
 };
 
@@ -79,7 +79,7 @@ pub fn add_update_remove_config() {
 
     assert_eq!(builder.config_paths_count(None), 0);
 
-    let mut diagnostics = WAFOwned::<WAFMap>::default();
+    let mut diagnostics = WafOwned::<WafMap>::default();
     assert!(builder.add_or_update_config("test", &rules_1, Some(&mut diagnostics)));
     assert!(diagnostics.is_valid());
     assert_eq!(

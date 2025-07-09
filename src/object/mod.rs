@@ -11,10 +11,10 @@ mod iter;
 #[doc(inline)]
 pub use iter::*;
 
-/// Identifies the type of the value stored in a [`WAFObject`].
+/// Identifies the type of the value stored in a [`WafObject`].
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum WAFObjectType {
+pub enum WafObjectType {
     /// An invalid value. This can be used as a placeholder to retain the key
     /// associated with an object that was only aprtially encoded.
     Invalid,
@@ -24,9 +24,9 @@ pub enum WAFObjectType {
     Unsigned,
     /// A string value.
     String,
-    /// An array of [`WAFObject`]s.
+    /// An array of [`WafObject`]s.
     Array,
-    /// A map of string-keyed [`WAFObject`]s.
+    /// A map of string-keyed [`WafObject`]s.
     Map,
     /// A boolean value.
     Bool,
@@ -35,41 +35,41 @@ pub enum WAFObjectType {
     /// The null value.
     Null,
 }
-impl WAFObjectType {
-    /// Returns the raw [`bindings::DDWAF_OBJ_TYPE`] value corresponding to this [`WAFObjectType`].
+impl WafObjectType {
+    /// Returns the raw [`bindings::DDWAF_OBJ_TYPE`] value corresponding to this [`WafObjectType`].
     const fn as_raw(self) -> bindings::DDWAF_OBJ_TYPE {
         match self {
-            WAFObjectType::Invalid => bindings::DDWAF_OBJ_INVALID,
-            WAFObjectType::Signed => bindings::DDWAF_OBJ_SIGNED,
-            WAFObjectType::Unsigned => bindings::DDWAF_OBJ_UNSIGNED,
-            WAFObjectType::String => bindings::DDWAF_OBJ_STRING,
-            WAFObjectType::Array => bindings::DDWAF_OBJ_ARRAY,
-            WAFObjectType::Map => bindings::DDWAF_OBJ_MAP,
-            WAFObjectType::Bool => bindings::DDWAF_OBJ_BOOL,
-            WAFObjectType::Float => bindings::DDWAF_OBJ_FLOAT,
-            WAFObjectType::Null => bindings::DDWAF_OBJ_NULL,
+            WafObjectType::Invalid => bindings::DDWAF_OBJ_INVALID,
+            WafObjectType::Signed => bindings::DDWAF_OBJ_SIGNED,
+            WafObjectType::Unsigned => bindings::DDWAF_OBJ_UNSIGNED,
+            WafObjectType::String => bindings::DDWAF_OBJ_STRING,
+            WafObjectType::Array => bindings::DDWAF_OBJ_ARRAY,
+            WafObjectType::Map => bindings::DDWAF_OBJ_MAP,
+            WafObjectType::Bool => bindings::DDWAF_OBJ_BOOL,
+            WafObjectType::Float => bindings::DDWAF_OBJ_FLOAT,
+            WafObjectType::Null => bindings::DDWAF_OBJ_NULL,
         }
     }
 }
-impl TryFrom<bindings::DDWAF_OBJ_TYPE> for WAFObjectType {
+impl TryFrom<bindings::DDWAF_OBJ_TYPE> for WafObjectType {
     type Error = UnknownObjectTypeError;
     fn try_from(value: bindings::DDWAF_OBJ_TYPE) -> Result<Self, UnknownObjectTypeError> {
         match value {
-            bindings::DDWAF_OBJ_INVALID => Ok(WAFObjectType::Invalid),
-            bindings::DDWAF_OBJ_SIGNED => Ok(WAFObjectType::Signed),
-            bindings::DDWAF_OBJ_UNSIGNED => Ok(WAFObjectType::Unsigned),
-            bindings::DDWAF_OBJ_STRING => Ok(WAFObjectType::String),
-            bindings::DDWAF_OBJ_ARRAY => Ok(WAFObjectType::Array),
-            bindings::DDWAF_OBJ_MAP => Ok(WAFObjectType::Map),
-            bindings::DDWAF_OBJ_BOOL => Ok(WAFObjectType::Bool),
-            bindings::DDWAF_OBJ_FLOAT => Ok(WAFObjectType::Float),
-            bindings::DDWAF_OBJ_NULL => Ok(WAFObjectType::Null),
+            bindings::DDWAF_OBJ_INVALID => Ok(WafObjectType::Invalid),
+            bindings::DDWAF_OBJ_SIGNED => Ok(WafObjectType::Signed),
+            bindings::DDWAF_OBJ_UNSIGNED => Ok(WafObjectType::Unsigned),
+            bindings::DDWAF_OBJ_STRING => Ok(WafObjectType::String),
+            bindings::DDWAF_OBJ_ARRAY => Ok(WafObjectType::Array),
+            bindings::DDWAF_OBJ_MAP => Ok(WafObjectType::Map),
+            bindings::DDWAF_OBJ_BOOL => Ok(WafObjectType::Bool),
+            bindings::DDWAF_OBJ_FLOAT => Ok(WafObjectType::Float),
+            bindings::DDWAF_OBJ_NULL => Ok(WafObjectType::Null),
             unknown => Err(UnknownObjectTypeError(unknown)),
         }
     }
 }
 
-/// The error that is returned when a [`WAFObject`] does not have a known, valid [`WAFObjectType`].
+/// The error that is returned when a [`WafObject`] does not have a known, valid [`WafObjectType`].
 #[derive(Copy, Clone, Debug)]
 pub struct UnknownObjectTypeError(bindings::DDWAF_OBJ_TYPE);
 impl std::error::Error for UnknownObjectTypeError {}
@@ -79,11 +79,11 @@ impl std::fmt::Display for UnknownObjectTypeError {
     }
 }
 
-/// The error that is returned when a [`WAFObject`] does not have the expected [`WAFObjectType`].
+/// The error that is returned when a [`WafObject`] does not have the expected [`WafObjectType`].
 #[derive(Copy, Clone, Debug)]
 pub struct ObjectTypeError {
-    pub expected: WAFObjectType,
-    pub actual: WAFObjectType,
+    pub expected: WafObjectType,
+    pub actual: WafObjectType,
 }
 impl std::error::Error for ObjectTypeError {}
 impl std::fmt::Display for ObjectTypeError {
@@ -97,7 +97,7 @@ impl std::fmt::Display for ObjectTypeError {
 }
 
 /// This trait allow obtaining direct mutable access to the underlying memory
-/// backing a [`WAFObject`] or [`TypedWAFObject`] value.
+/// backing a [`WafObject`] or [`TypedWafObject`] value.
 #[doc(hidden)]
 pub trait AsRawMutObject: crate::private::Sealed + AsRef<bindings::ddwaf_object> {
     /// Obtains a mutable reference to the underlying raw `ddwaf_object`]`.
@@ -118,38 +118,38 @@ pub trait AsRawMutObject: crate::private::Sealed + AsRef<bindings::ddwaf_object>
     unsafe fn as_raw_mut(&mut self) -> &mut bindings::ddwaf_object;
 }
 
-/// This trait is implemented by type-safe interfaces to the [`WAFObject`], with
-/// one implementation for each [`WAFObjectType`].
-pub trait TypedWAFObject: AsRawMutObject {
-    /// The associated [`WAFObjectType`] constant corresponding to the typed
+/// This trait is implemented by type-safe interfaces to the [`WafObject`], with
+/// one implementation for each [`WafObjectType`].
+pub trait TypedWafObject: AsRawMutObject {
+    /// The associated [`WafObjectType`] constant corresponding to the typed
     /// object's type discriminator.
-    const TYPE: WAFObjectType;
+    const TYPE: WafObjectType;
 }
 
 /// The low-level representation of an arbitrary WAF object.
 ///
-/// It is usually converted to a [`TypedWAFObject`] by calling [`WAFObject::as_type`].
+/// It is usually converted to a [`TypedWafObject`] by calling [`WafObject::as_type`].
 #[derive(Default)]
 #[repr(transparent)]
-pub struct WAFObject {
+pub struct WafObject {
     raw: bindings::ddwaf_object,
 }
-impl WAFObject {
-    /// Returns the [`WAFObjectType`] of the underlying value.
+impl WafObject {
+    /// Returns the [`WafObjectType`] of the underlying value.
     ///
-    /// Returns [`WAFObjectType::Invalid`] if the underlying value's type is not set to a
-    /// known, valid [`WAFObjectType`] value.
+    /// Returns [`WafObjectType::Invalid`] if the underlying value's type is not set to a
+    /// known, valid [`WafObjectType`] value.
     #[must_use]
-    pub fn get_type(&self) -> WAFObjectType {
+    pub fn get_type(&self) -> WafObjectType {
         self.as_ref()
             .type_
             .try_into()
-            .unwrap_or(WAFObjectType::Invalid)
+            .unwrap_or(WafObjectType::Invalid)
     }
 
     /// Returns a reference to this value as a `T` if its type corresponds.
     #[must_use]
-    pub fn as_type<T: TypedWAFObject>(&self) -> Option<&T> {
+    pub fn as_type<T: TypedWafObject>(&self) -> Option<&T> {
         if self.get_type() == T::TYPE {
             Some(unsafe { self.as_type_unchecked::<T>() })
         } else {
@@ -160,13 +160,13 @@ impl WAFObject {
     /// Returns a reference to this value as a `T`.
     ///
     /// # Safety
-    /// The caller must ensure that the [`WAFObject`] can be accurately represented by `T`.
-    pub(crate) unsafe fn as_type_unchecked<T: TypedWAFObject>(&self) -> &T {
+    /// The caller must ensure that the [`WafObject`] can be accurately represented by `T`.
+    pub(crate) unsafe fn as_type_unchecked<T: TypedWafObject>(&self) -> &T {
         self.as_ref().unchecked_as_ref::<T>()
     }
 
     /// Returns a mutable reference to this value as a `T` if its type corresponds.
-    pub fn as_type_mut<T: TypedWAFObject>(&mut self) -> Option<&mut T> {
+    pub fn as_type_mut<T: TypedWafObject>(&mut self) -> Option<&mut T> {
         if self.get_type() == T::TYPE {
             Some(unsafe { self.as_raw_mut().unchecked_as_ref_mut::<T>() })
         } else {
@@ -174,155 +174,155 @@ impl WAFObject {
         }
     }
 
-    /// Returns true if this [`WAFObject`] is not [`WAFObjectType::Invalid`], meaning it can be
-    /// converted to one of the [`TypedWAFObject`] implementations.
+    /// Returns true if this [`WafObject`] is not [`WafObjectType::Invalid`], meaning it can be
+    /// converted to one of the [`TypedWafObject`] implementations.
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        self.get_type() != WAFObjectType::Invalid
+        self.get_type() != WafObjectType::Invalid
     }
 
-    /// Returns the value of this [`WAFObject`] as a [`u64`] if its type is [`WAFObjectType::Unsigned`].
+    /// Returns the value of this [`WafObject`] as a [`u64`] if its type is [`WafObjectType::Unsigned`].
     #[must_use]
     pub fn to_u64(&self) -> Option<u64> {
-        self.as_type::<WAFUnsigned>().map(WAFUnsigned::value)
+        self.as_type::<WafUnsigned>().map(WafUnsigned::value)
     }
 
-    /// Returns the value of this [`WAFObject`] as a [`i64`] if its type is [`WAFObjectType::Signed`] (or
-    /// [`WAFObjectType::Unsigned`] with a value that can be represented as an [`i64`]).
+    /// Returns the value of this [`WafObject`] as a [`i64`] if its type is [`WafObjectType::Signed`] (or
+    /// [`WafObjectType::Unsigned`] with a value that can be represented as an [`i64`]).
     #[must_use]
     pub fn to_i64(&self) -> Option<i64> {
         match self.get_type() {
-            WAFObjectType::Unsigned => {
-                let obj: &WAFUnsigned = unsafe { self.as_type_unchecked() };
+            WafObjectType::Unsigned => {
+                let obj: &WafUnsigned = unsafe { self.as_type_unchecked() };
                 obj.value().try_into().ok()
             }
-            WAFObjectType::Signed => {
-                let obj: &WAFSigned = unsafe { self.as_type_unchecked() };
+            WafObjectType::Signed => {
+                let obj: &WafSigned = unsafe { self.as_type_unchecked() };
                 Some(obj.value())
             }
             _ => None,
         }
     }
 
-    /// Returns the value of this [`WAFObject`] as a [`f64`] if its type is [`WAFObjectType::Float`].
+    /// Returns the value of this [`WafObject`] as a [`f64`] if its type is [`WafObjectType::Float`].
     #[must_use]
     pub fn to_f64(&self) -> Option<f64> {
-        self.as_type::<WAFFloat>().map(WAFFloat::value)
+        self.as_type::<WafFloat>().map(WafFloat::value)
     }
 
-    /// Returns the value of this [`WAFObject`] as a [`bool`] if its type is [`WAFObjectType::Bool`].
+    /// Returns the value of this [`WafObject`] as a [`bool`] if its type is [`WafObjectType::Bool`].
     #[must_use]
     pub fn to_bool(&self) -> Option<bool> {
-        self.as_type::<WAFBool>().map(WAFBool::value)
+        self.as_type::<WafBool>().map(WafBool::value)
     }
 
-    /// Returns the value of this [`WAFObject`] as a [`&str`] if its type is [`WAFObjectType::String`],
+    /// Returns the value of this [`WafObject`] as a [`&str`] if its type is [`WafObjectType::String`],
     /// and the value is valid UTF-8.
     #[must_use]
     pub fn to_str(&self) -> Option<&str> {
-        self.as_type::<WAFString>().and_then(|x| x.as_str().ok())
+        self.as_type::<WafString>().and_then(|x| x.as_str().ok())
     }
 }
-impl AsRef<bindings::ddwaf_object> for WAFObject {
+impl AsRef<bindings::ddwaf_object> for WafObject {
     fn as_ref(&self) -> &bindings::ddwaf_object {
         &self.raw
     }
 }
-impl AsRawMutObject for WAFObject {
+impl AsRawMutObject for WafObject {
     unsafe fn as_raw_mut(&mut self) -> &mut bindings::ddwaf_object {
         &mut self.raw
     }
 }
-impl fmt::Debug for WAFObject {
+impl fmt::Debug for WafObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.get_type() {
-            WAFObjectType::Invalid => write!(f, "WAFInvalid"),
-            WAFObjectType::Unsigned => {
-                let obj: &WAFUnsigned = self.as_type().unwrap();
+            WafObjectType::Invalid => write!(f, "WafInvalid"),
+            WafObjectType::Unsigned => {
+                let obj: &WafUnsigned = self.as_type().unwrap();
                 obj.fmt(f)
             }
-            WAFObjectType::Signed => {
-                let obj: &WAFSigned = self.as_type().unwrap();
+            WafObjectType::Signed => {
+                let obj: &WafSigned = self.as_type().unwrap();
                 obj.fmt(f)
             }
-            WAFObjectType::Float => {
-                let obj: &WAFFloat = self.as_type().unwrap();
+            WafObjectType::Float => {
+                let obj: &WafFloat = self.as_type().unwrap();
                 obj.fmt(f)
             }
-            WAFObjectType::Bool => {
-                let obj: &WAFBool = self.as_type().unwrap();
+            WafObjectType::Bool => {
+                let obj: &WafBool = self.as_type().unwrap();
                 obj.fmt(f)
             }
-            WAFObjectType::Null => {
-                let obj: &WAFNull = self.as_type().unwrap();
+            WafObjectType::Null => {
+                let obj: &WafNull = self.as_type().unwrap();
                 obj.fmt(f)
             }
-            WAFObjectType::String => {
-                let obj: &WAFString = self.as_type().unwrap();
+            WafObjectType::String => {
+                let obj: &WafString = self.as_type().unwrap();
                 obj.fmt(f)
             }
-            WAFObjectType::Array => {
-                let obj: &WAFArray = self.as_type().unwrap();
+            WafObjectType::Array => {
+                let obj: &WafArray = self.as_type().unwrap();
                 obj.fmt(f)
             }
-            WAFObjectType::Map => {
-                let obj: &WAFMap = self.as_type().unwrap();
+            WafObjectType::Map => {
+                let obj: &WafMap = self.as_type().unwrap();
                 obj.fmt(f)
             }
         }
     }
 }
-impl Drop for WAFObject {
+impl Drop for WafObject {
     fn drop(&mut self) {
         unsafe { self.raw.drop_object() }
     }
 }
-impl From<u64> for WAFObject {
+impl From<u64> for WafObject {
     fn from(value: u64) -> Self {
-        WAFUnsigned::new(value).into()
+        WafUnsigned::new(value).into()
     }
 }
-impl From<u32> for WAFObject {
+impl From<u32> for WafObject {
     fn from(value: u32) -> Self {
-        WAFUnsigned::new(value.into()).into()
+        WafUnsigned::new(value.into()).into()
     }
 }
-impl From<i64> for WAFObject {
+impl From<i64> for WafObject {
     fn from(value: i64) -> Self {
-        WAFSigned::new(value).into()
+        WafSigned::new(value).into()
     }
 }
-impl From<i32> for WAFObject {
+impl From<i32> for WafObject {
     fn from(value: i32) -> Self {
-        WAFSigned::new(value.into()).into()
+        WafSigned::new(value.into()).into()
     }
 }
-impl From<f64> for WAFObject {
+impl From<f64> for WafObject {
     fn from(value: f64) -> Self {
-        WAFFloat::new(value).into()
+        WafFloat::new(value).into()
     }
 }
-impl From<bool> for WAFObject {
+impl From<bool> for WafObject {
     fn from(value: bool) -> Self {
-        WAFBool::new(value).into()
+        WafBool::new(value).into()
     }
 }
-impl From<&str> for WAFObject {
+impl From<&str> for WafObject {
     fn from(value: &str) -> Self {
-        WAFString::new(value).into()
+        WafString::new(value).into()
     }
 }
-impl From<&[u8]> for WAFObject {
+impl From<&[u8]> for WafObject {
     fn from(value: &[u8]) -> Self {
-        WAFString::new(value).into()
+        WafString::new(value).into()
     }
 }
-impl From<()> for WAFObject {
+impl From<()> for WafObject {
     fn from((): ()) -> Self {
-        WAFNull::new().into()
+        WafNull::new().into()
     }
 }
-impl<T: TypedWAFObject> From<T> for WAFObject {
+impl<T: TypedWafObject> From<T> for WafObject {
     fn from(value: T) -> Self {
         let res = Self {
             raw: *value.as_ref(),
@@ -331,38 +331,38 @@ impl<T: TypedWAFObject> From<T> for WAFObject {
         res
     }
 }
-impl crate::private::Sealed for WAFObject {}
+impl crate::private::Sealed for WafObject {}
 
-/// A WAF-owned [`WAFObject`] or [`TypedWAFObject`] value.
+/// A WAF-owned [`WafObject`] or [`TypedWafObject`] value.
 ///
-/// This has different [`Drop`] behavior than a rust-owned [`WAFObject`] value.
-pub struct WAFOwned<T: AsRawMutObject> {
+/// This has different [`Drop`] behavior than a rust-owned [`WafObject`] value.
+pub struct WafOwned<T: AsRawMutObject> {
     inner: std::mem::ManuallyDrop<T>,
 }
-impl<T: AsRawMutObject + fmt::Debug> fmt::Debug for WAFOwned<T> {
+impl<T: AsRawMutObject + fmt::Debug> fmt::Debug for WafOwned<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.deref().fmt(f)
     }
 }
-impl<T: AsRawMutObject + Default> Default for WAFOwned<T> {
+impl<T: AsRawMutObject + Default> Default for WafOwned<T> {
     fn default() -> Self {
         Self {
             inner: std::mem::ManuallyDrop::new(Default::default()),
         }
     }
 }
-impl<T: AsRawMutObject> Deref for WAFOwned<T> {
+impl<T: AsRawMutObject> Deref for WafOwned<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
-impl<T: AsRawMutObject> DerefMut for WAFOwned<T> {
+impl<T: AsRawMutObject> DerefMut for WafOwned<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
-impl<T: AsRawMutObject> Drop for WAFOwned<T> {
+impl<T: AsRawMutObject> Drop for WafOwned<T> {
     fn drop(&mut self) {
         unsafe { bindings::ddwaf_object_free(self.inner.as_raw_mut()) };
     }
@@ -398,9 +398,9 @@ macro_rules! typed_object {
                 self.raw.type_ == $type.as_raw()
             }
 
-            /// Returns a reference to this value as a [`WAFObject`].
+            /// Returns a reference to this value as a [`WafObject`].
             #[must_use]
-            pub fn as_object(&self) -> &WAFObject{
+            pub fn as_object(&self) -> &WafObject{
                 let obj: &bindings::ddwaf_object = self.as_ref();
                 obj.as_object_ref()
             }
@@ -427,9 +427,9 @@ macro_rules! typed_object {
                 }
             }
         }
-        impl TryFrom<WAFObject> for $name {
+        impl TryFrom<WafObject> for $name {
             type Error = ObjectTypeError;
-            fn try_from(obj: WAFObject) -> Result<Self, Self::Error> {
+            fn try_from(obj: WafObject) -> Result<Self, Self::Error> {
                 if obj.get_type() != Self::TYPE {
                     return Err(ObjectTypeError {
                         expected: $type,
@@ -442,15 +442,15 @@ macro_rules! typed_object {
             }
         }
         impl crate::private::Sealed for $name {}
-        impl TypedWAFObject for $name {
-            const TYPE: WAFObjectType = $type;
+        impl TypedWafObject for $name {
+            const TYPE: WafObjectType = $type;
         }
     };
 }
 
-typed_object!(WAFObjectType::Invalid => WAFInvalid);
-typed_object!(WAFObjectType::Signed => WAFSigned {
-    /// Creates a new [WAFSigned] with the provided value.
+typed_object!(WafObjectType::Invalid => WafInvalid);
+typed_object!(WafObjectType::Signed => WafSigned {
+    /// Creates a new [WafSigned] with the provided value.
     #[must_use]
     pub const fn new(val: i64) -> Self {
         Self {
@@ -464,14 +464,14 @@ typed_object!(WAFObjectType::Signed => WAFSigned {
         }
     }
 
-    /// Returns the value of this [WAFSigned].
+    /// Returns the value of this [WafSigned].
     #[must_use]
     pub const fn value(&self) -> i64 {
         unsafe { self.raw.__bindgen_anon_1.intValue }
     }
 });
-typed_object!(WAFObjectType::Unsigned => WAFUnsigned {
-    /// Creates a new [WAFUnsigned] with the provided value.
+typed_object!(WafObjectType::Unsigned => WafUnsigned {
+    /// Creates a new [WafUnsigned] with the provided value.
     #[must_use]
     pub const fn new (val: u64) -> Self {
         Self {
@@ -485,14 +485,14 @@ typed_object!(WAFObjectType::Unsigned => WAFUnsigned {
         }
     }
 
-    /// Retuns the value of this [WAFUnsigned].
+    /// Retuns the value of this [WafUnsigned].
     #[must_use]
     pub const fn value(&self) -> u64 {
         unsafe { self.raw.__bindgen_anon_1.uintValue }
     }
 });
-typed_object!(WAFObjectType::String => WAFString {
-    /// Creates a new [WAFString] with the provided value.
+typed_object!(WafObjectType::String => WafString {
+    /// Creates a new [WafString] with the provided value.
     pub fn new(val: impl AsRef<[u8]>) -> Self {
         let val = val.as_ref();
         let ptr = if val.is_empty() {
@@ -513,7 +513,7 @@ typed_object!(WAFObjectType::String => WAFString {
         }
     }
 
-    /// Returns the length of this [WAFString], in bytes.
+    /// Returns the length of this [WafString], in bytes.
     ///
     /// # Panics
     /// Panics if the string is larger than [`usize::MAX`] bytes. This can only happen on
@@ -523,13 +523,13 @@ typed_object!(WAFObjectType::String => WAFString {
         usize::try_from(self.raw.nbEntries).expect("string is too large for this platform")
     }
 
-    /// Returns true if this [WAFString] is empty.
+    /// Returns true if this [WafString] is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Returns a slice of the bytes from this [WAFString].
+    /// Returns a slice of the bytes from this [WafString].
     #[must_use]
     pub fn bytes(&self) -> &[u8] {
         debug_assert_eq!(self.raw.type_, bindings::DDWAF_OBJ_STRING);
@@ -545,7 +545,7 @@ typed_object!(WAFObjectType::String => WAFString {
         }
     }
 
-    /// Returns a string slice from this [WAFString].
+    /// Returns a string slice from this [WafString].
     ///
     /// # Errors
     /// Returns an error if the underlying data is not a valid UTF-8 string, under the same conditions as
@@ -554,9 +554,9 @@ typed_object!(WAFObjectType::String => WAFString {
         std::str::from_utf8(self.bytes())
     }
 });
-typed_object!(WAFObjectType::Array => WAFArray {
-    /// Creates a new [WAFArray] with the provided size. All values in the array are initialized
-    /// to an invalid [WAFObject] instance.
+typed_object!(WafObjectType::Array => WafArray {
+    /// Creates a new [WafArray] with the provided size. All values in the array are initialized
+    /// to an invalid [WafObject] instance.
     ///
     /// # Panics
     /// Panics when the provided `nb_entries` is larger than what the current platform can represent in an [`usize`].
@@ -577,7 +577,7 @@ typed_object!(WAFObjectType::Array => WAFArray {
         }
     }
 
-    /// Returns the length of this [WAFArray].
+    /// Returns the length of this [WafArray].
     ///
     /// # Panics
     /// Panics if the array is larger than [`usize::MAX`] elements. This can only happen on
@@ -587,27 +587,27 @@ typed_object!(WAFObjectType::Array => WAFArray {
         usize::try_from(self.raw.nbEntries).expect("array is too large for this platform")
     }
 
-    /// Returns true if this [WAFArray] is empty.
+    /// Returns true if this [WafArray] is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Returns an iterator over the [`Keyed<WAFObject>`]s in this [WAFMap].
-    pub fn iter(&self) -> impl Iterator<Item = &WAFObject> {
-        let slice : &[WAFObject] = self.as_ref();
+    /// Returns an iterator over the [`Keyed<WafObject>`]s in this [WafMap].
+    pub fn iter(&self) -> impl Iterator<Item = &WafObject> {
+        let slice : &[WafObject] = self.as_ref();
         slice.iter()
     }
 
-    /// Returns a mutable iterator over the [`Keyed<WAFObject>`]s in this [WAFMap].
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut WAFObject> {
-        let slice : &mut [WAFObject] = AsMut::as_mut(self);
+    /// Returns a mutable iterator over the [`Keyed<WafObject>`]s in this [WafMap].
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut WafObject> {
+        let slice : &mut [WafObject] = AsMut::as_mut(self);
         slice.iter_mut()
     }
 });
-typed_object!(WAFObjectType::Map => WAFMap {
-    /// Creates a new [WAFMap] with the provided size. All values in the map are initialized
-    /// to an invalid [WAFObject] instance with a blank key.
+typed_object!(WafObjectType::Map => WafMap {
+    /// Creates a new [WafMap] with the provided size. All values in the map are initialized
+    /// to an invalid [WafObject] instance with a blank key.
     ///
     /// # Panics
     /// Panics when the provided `nbEntries` is larger than what the current platform can represent in an [`usize`].
@@ -628,7 +628,7 @@ typed_object!(WAFObjectType::Map => WAFMap {
         }
     }
 
-    /// Returns the length of this [WAFMap].
+    /// Returns the length of this [WafMap].
     ///
     /// # Panics
     /// Panics if the map is larger than [`usize::MAX`] elements. This can only happen on platforms
@@ -638,29 +638,29 @@ typed_object!(WAFObjectType::Map => WAFMap {
         usize::try_from(self.raw.nbEntries).expect("map is too large for this platform")
     }
 
-    /// Returns true if this [WAFMap] is empty.
+    /// Returns true if this [WafMap] is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Returns an iterator over the [`Keyed<WAFObject>`]s in this [WAFMap].
-    pub fn iter(&self) -> impl Iterator<Item = &Keyed<WAFObject>> {
-        let slice : &[Keyed<WAFObject>] = self.as_ref();
+    /// Returns an iterator over the [`Keyed<WafObject>`]s in this [WafMap].
+    pub fn iter(&self) -> impl Iterator<Item = &Keyed<WafObject>> {
+        let slice : &[Keyed<WafObject>] = self.as_ref();
         slice.iter()
     }
 
-    /// Returns a mutable iterator over the [`Keyed<WAFObject>`]s in this [WAFMap].
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Keyed<WAFObject>> {
-        let slice : &mut [Keyed<WAFObject>] = AsMut::as_mut(self);
+    /// Returns a mutable iterator over the [`Keyed<WafObject>`]s in this [WafMap].
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Keyed<WafObject>> {
+        let slice : &mut [Keyed<WafObject>] = AsMut::as_mut(self);
         slice.iter_mut()
     }
 
-    /// Returns a reference to the [`Keyed<WAFObject>`] with the provided key, if one exists.
+    /// Returns a reference to the [`Keyed<WafObject>`] with the provided key, if one exists.
     ///
     /// If multiple such objects exist in the receiver, the first match is returned.
     #[must_use]
-    pub fn get(&self, key: &'_ [u8]) -> Option<&Keyed<WAFObject>> {
+    pub fn get(&self, key: &'_ [u8]) -> Option<&Keyed<WafObject>> {
         for o in self.iter() {
             if o.key() == key {
                 return Some(o)
@@ -669,10 +669,10 @@ typed_object!(WAFObjectType::Map => WAFMap {
         None
     }
 
-    /// Returns a mutable reference to the [`Keyed<WAFObject>`] with the provided key, if one exists.
+    /// Returns a mutable reference to the [`Keyed<WafObject>`] with the provided key, if one exists.
     ///
     /// If multiple such objects exist in the receiver, the first match is returned.
-    pub fn get_mut(&mut self, key: &'_ [u8]) -> Option<&mut Keyed<WAFObject>> {
+    pub fn get_mut(&mut self, key: &'_ [u8]) -> Option<&mut Keyed<WafObject>> {
         for o in self.iter_mut() {
             if o.key() == key {
                 return Some(o)
@@ -681,19 +681,19 @@ typed_object!(WAFObjectType::Map => WAFMap {
         None
     }
 
-    /// Returns a reference to the [`Keyed<WAFObject>`] with the provided key, if one exists.
+    /// Returns a reference to the [`Keyed<WafObject>`] with the provided key, if one exists.
     #[must_use]
-    pub fn get_str(&self, key: &'_ str) -> Option<&Keyed<WAFObject>> {
+    pub fn get_str(&self, key: &'_ str) -> Option<&Keyed<WafObject>> {
         self.get(key.as_bytes())
     }
 
-    /// Returns a mutable reference to the [`Keyed<WAFObject>`] with the provided key, if one exists.
-    pub fn get_str_mut(&mut self, key: &'_ str) -> Option<&mut Keyed<WAFObject>> {
+    /// Returns a mutable reference to the [`Keyed<WafObject>`] with the provided key, if one exists.
+    pub fn get_str_mut(&mut self, key: &'_ str) -> Option<&mut Keyed<WafObject>> {
         self.get_mut(key.as_bytes())
     }
 });
-typed_object!(WAFObjectType::Bool => WAFBool {
-    /// Creates a new [WAFBool] with the provided value.
+typed_object!(WafObjectType::Bool => WafBool {
+    /// Creates a new [WafBool] with the provided value.
     #[must_use]
     pub const fn new(val: bool) -> Self {
         Self {
@@ -707,14 +707,14 @@ typed_object!(WAFObjectType::Bool => WAFBool {
         }
     }
 
-    /// Returns the value of this [WAFBool].
+    /// Returns the value of this [WafBool].
     #[must_use]
     pub const fn value(&self) -> bool {
         unsafe { self.raw.__bindgen_anon_1.boolean }
     }
 });
-typed_object!(WAFObjectType::Float => WAFFloat {
-    /// Creates a new [WAFFloat] with the provided value.
+typed_object!(WafObjectType::Float => WafFloat {
+    /// Creates a new [WafFloat] with the provided value.
     #[must_use]
     pub const fn new(val: f64) -> Self {
         Self {
@@ -728,14 +728,14 @@ typed_object!(WAFObjectType::Float => WAFFloat {
         }
     }
 
-    /// Returns the value of this [WAFFloat].
+    /// Returns the value of this [WafFloat].
     #[must_use]
     pub const fn value(&self) -> f64 {
         unsafe { self.raw.__bindgen_anon_1.f64_ }
     }
 });
-typed_object!(WAFObjectType::Null => WAFNull {
-    /// Creates a new [WAFNull].
+typed_object!(WafObjectType::Null => WafNull {
+    /// Creates a new [WafNull].
     #[must_use]
     pub const fn new() -> Self {
         Self { raw: bindings::ddwaf_object {
@@ -748,61 +748,61 @@ typed_object!(WAFObjectType::Null => WAFNull {
     }
 });
 
-impl fmt::Debug for WAFSigned {
+impl fmt::Debug for WafSigned {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", stringify!(WAFSigned), self.value())
+        write!(f, "{}({})", stringify!(WafSigned), self.value())
     }
 }
-impl From<i64> for WAFSigned {
+impl From<i64> for WafSigned {
     fn from(value: i64) -> Self {
         Self::new(value)
     }
 }
-impl From<i32> for WAFSigned {
+impl From<i32> for WafSigned {
     fn from(value: i32) -> Self {
         Self::new(value.into())
     }
 }
 
-impl fmt::Debug for WAFUnsigned {
+impl fmt::Debug for WafUnsigned {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", stringify!(WAFUnsigned), self.value())
+        write!(f, "{}({})", stringify!(WafUnsigned), self.value())
     }
 }
-impl From<u64> for WAFUnsigned {
+impl From<u64> for WafUnsigned {
     fn from(value: u64) -> Self {
         Self::new(value)
     }
 }
-impl From<u32> for WAFUnsigned {
+impl From<u32> for WafUnsigned {
     fn from(value: u32) -> Self {
         Self::new(value.into())
     }
 }
 
-impl<T: AsRef<[u8]>> From<T> for WAFString {
+impl<T: AsRef<[u8]>> From<T> for WafString {
     fn from(val: T) -> Self {
         Self::new(val)
     }
 }
-impl fmt::Debug for WAFString {
+impl fmt::Debug for WafString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}(\"{:?}\")",
-            stringify!(WAFString),
+            stringify!(WafString),
             fmt_bin_str(self.bytes())
         )
     }
 }
-impl Drop for WAFString {
+impl Drop for WafString {
     fn drop(&mut self) {
         unsafe { self.raw.drop_string() }
     }
 }
 
-impl AsRef<[WAFObject]> for WAFArray {
-    fn as_ref(&self) -> &[WAFObject] {
+impl AsRef<[WafObject]> for WafArray {
+    fn as_ref(&self) -> &[WafObject] {
         if self.is_empty() {
             return &[];
         }
@@ -810,8 +810,8 @@ impl AsRef<[WAFObject]> for WAFArray {
         unsafe { std::slice::from_raw_parts(array, self.len()) }
     }
 }
-impl AsMut<[WAFObject]> for WAFArray {
-    fn as_mut(&mut self) -> &mut [WAFObject] {
+impl AsMut<[WafObject]> for WafArray {
+    fn as_mut(&mut self) -> &mut [WafObject] {
         if self.is_empty() {
             return &mut [];
         }
@@ -819,9 +819,9 @@ impl AsMut<[WAFObject]> for WAFArray {
         unsafe { std::slice::from_raw_parts_mut(array, self.len()) }
     }
 }
-impl fmt::Debug for WAFArray {
+impl fmt::Debug for WafArray {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}[", stringify!(WAFArray))?;
+        write!(f, "{}[", stringify!(WafArray))?;
         let mut first = true;
         for obj in self.iter() {
             if first {
@@ -834,12 +834,12 @@ impl fmt::Debug for WAFArray {
         write!(f, "]")
     }
 }
-impl Drop for WAFArray {
+impl Drop for WafArray {
     fn drop(&mut self) {
         unsafe { self.raw.drop_array() }
     }
 }
-impl<T: Into<WAFObject>, const N: usize> From<[T; N]> for WAFArray {
+impl<T: Into<WafObject>, const N: usize> From<[T; N]> for WafArray {
     fn from(value: [T; N]) -> Self {
         let mut array = Self::new(value.len() as u64);
         for (i, obj) in value.into_iter().enumerate() {
@@ -848,8 +848,8 @@ impl<T: Into<WAFObject>, const N: usize> From<[T; N]> for WAFArray {
         array
     }
 }
-impl Index<usize> for WAFArray {
-    type Output = WAFObject;
+impl Index<usize> for WafArray {
+    type Output = WafObject;
     fn index(&self, index: usize) -> &Self::Output {
         let obj: &bindings::ddwaf_object = self.as_ref();
         assert!(
@@ -863,7 +863,7 @@ impl Index<usize> for WAFArray {
         unsafe { &*(array.add(index) as *const _) }
     }
 }
-impl IndexMut<usize> for WAFArray {
+impl IndexMut<usize> for WafArray {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let obj: &bindings::ddwaf_object = self.as_ref();
         assert!(
@@ -878,8 +878,8 @@ impl IndexMut<usize> for WAFArray {
     }
 }
 
-impl AsRef<[Keyed<WAFObject>]> for WAFMap {
-    fn as_ref(&self) -> &[Keyed<WAFObject>] {
+impl AsRef<[Keyed<WafObject>]> for WafMap {
+    fn as_ref(&self) -> &[Keyed<WafObject>] {
         if self.is_empty() {
             return &[];
         }
@@ -887,8 +887,8 @@ impl AsRef<[Keyed<WAFObject>]> for WAFMap {
         unsafe { std::slice::from_raw_parts(array, self.len()) }
     }
 }
-impl AsMut<[Keyed<WAFObject>]> for WAFMap {
-    fn as_mut(&mut self) -> &mut [Keyed<WAFObject>] {
+impl AsMut<[Keyed<WafObject>]> for WafMap {
+    fn as_mut(&mut self) -> &mut [Keyed<WafObject>] {
         if self.is_empty() {
             return &mut [];
         }
@@ -896,9 +896,9 @@ impl AsMut<[Keyed<WAFObject>]> for WAFMap {
         unsafe { std::slice::from_raw_parts_mut(array, self.len()) }
     }
 }
-impl fmt::Debug for WAFMap {
+impl fmt::Debug for WafMap {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{{", stringify!(WAFMap))?;
+        write!(f, "{}{{", stringify!(WafMap))?;
         let mut first = true;
         for keyed_obj in self.iter() {
             if first {
@@ -911,13 +911,13 @@ impl fmt::Debug for WAFMap {
         write!(f, "}}")
     }
 }
-impl Drop for WAFMap {
+impl Drop for WafMap {
     fn drop(&mut self) {
         unsafe { self.raw.drop_map() }
     }
 }
-impl Index<usize> for WAFMap {
-    type Output = Keyed<WAFObject>;
+impl Index<usize> for WafMap {
+    type Output = Keyed<WafObject>;
     fn index(&self, index: usize) -> &Self::Output {
         let obj: &bindings::ddwaf_object = self.as_ref();
         assert!(
@@ -931,7 +931,7 @@ impl Index<usize> for WAFMap {
         unsafe { &*array.add(index) }.as_keyed_object_ref()
     }
 }
-impl IndexMut<usize> for WAFMap {
+impl IndexMut<usize> for WafMap {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let obj: &bindings::ddwaf_object = self.as_ref();
         assert!(
@@ -945,9 +945,9 @@ impl IndexMut<usize> for WAFMap {
         unsafe { (*array.add(index)).as_keyed_object_mut() }
     }
 }
-impl<K: AsRef<[u8]>, V: Into<WAFObject>, const N: usize> From<[(K, V); N]> for WAFMap {
+impl<K: AsRef<[u8]>, V: Into<WafObject>, const N: usize> From<[(K, V); N]> for WafMap {
     fn from(vals: [(K, V); N]) -> Self {
-        let mut map = WAFMap::new(N as u64);
+        let mut map = WafMap::new(N as u64);
         for (i, (k, v)) in vals.into_iter().enumerate() {
             map[i] = Keyed::from((k.as_ref(), v));
         }
@@ -955,46 +955,46 @@ impl<K: AsRef<[u8]>, V: Into<WAFObject>, const N: usize> From<[(K, V); N]> for W
     }
 }
 
-impl fmt::Debug for WAFBool {
+impl fmt::Debug for WafBool {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", stringify!(WAFBool), self.value())
+        write!(f, "{}({})", stringify!(WafBool), self.value())
     }
 }
-impl From<bool> for WAFBool {
+impl From<bool> for WafBool {
     fn from(value: bool) -> Self {
         Self::new(value)
     }
 }
 
-impl fmt::Debug for WAFFloat {
+impl fmt::Debug for WafFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", stringify!(WAFFloat), self.value())
+        write!(f, "{}({})", stringify!(WafFloat), self.value())
     }
 }
-impl From<f64> for WAFFloat {
+impl From<f64> for WafFloat {
     fn from(value: f64) -> Self {
         Self::new(value)
     }
 }
 
-impl fmt::Debug for WAFNull {
+impl fmt::Debug for WafNull {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", stringify!(WAFNull))
+        write!(f, "{}", stringify!(WafNull))
     }
 }
-impl From<()> for WAFNull {
+impl From<()> for WafNull {
     fn from((): ()) -> Self {
         Self::new()
     }
 }
 
-/// An [`WAFObject`] or [`TypedWAFObject`] associated with a key.
+/// An [`WafObject`] or [`TypedWafObject`] associated with a key.
 #[repr(transparent)]
 pub struct Keyed<T: AsRawMutObject> {
     value: T,
 }
 impl<T: AsRawMutObject> Keyed<T> {
-    /// Creates a new [`Keyed<WAFObject>`] wrapping the provided value, without setting the key..
+    /// Creates a new [`Keyed<WafObject>`] wrapping the provided value, without setting the key..
     pub(crate) fn new(value: T) -> Self {
         Self { value }
     }
@@ -1004,7 +1004,7 @@ impl<T: AsRawMutObject> Keyed<T> {
         &self.value
     }
 
-    /// Obtains the key associated with this [`Keyed<WAFObject>`], as-is.
+    /// Obtains the key associated with this [`Keyed<WafObject>`], as-is.
     ///
     /// # Panics
     /// Panics if the underlying object's key is too long to be represented on this platform. This can only happen on
@@ -1019,7 +1019,7 @@ impl<T: AsRawMutObject> Keyed<T> {
         unsafe { std::slice::from_raw_parts(obj.parameterName.cast(), len) }
     }
 
-    /// Obtains the key associated with this [`Keyed<WAFObject>`] as a string.
+    /// Obtains the key associated with this [`Keyed<WafObject>`] as a string.
     ///
     /// # Errors
     /// Returns an error if the underlying key data is not a valid UTF-8 string, under the same conditions as
@@ -1028,7 +1028,7 @@ impl<T: AsRawMutObject> Keyed<T> {
         std::str::from_utf8(self.key())
     }
 
-    /// Sets the key associated with this [`Keyed<WAFObject>`].
+    /// Sets the key associated with this [`Keyed<WafObject>`].
     pub fn set_key(&mut self, key: &[u8]) -> &mut Self {
         let obj = unsafe { self.as_raw_mut() };
         unsafe { obj.drop_key() };
@@ -1045,14 +1045,14 @@ impl<T: AsRawMutObject> Keyed<T> {
         self
     }
 
-    /// Sets the key associated with this [`Keyed<WAFObject>`] to the provided string.
+    /// Sets the key associated with this [`Keyed<WafObject>`] to the provided string.
     pub fn set_key_str(&mut self, key: &str) -> &mut Self {
         self.set_key(key.as_bytes())
     }
 }
-impl Keyed<WAFObject> {
+impl Keyed<WafObject> {
     #[must_use]
-    pub fn as_type<T: TypedWAFObject>(&self) -> Option<&Keyed<T>> {
+    pub fn as_type<T: TypedWafObject>(&self) -> Option<&Keyed<T>> {
         if self.value.get_type() == T::TYPE {
             Some(unsafe { &*(std::ptr::from_ref(self).cast()) })
         } else {
@@ -1060,7 +1060,7 @@ impl Keyed<WAFObject> {
         }
     }
 
-    pub fn as_type_mut<T: TypedWAFObject>(&mut self) -> Option<&mut Keyed<T>> {
+    pub fn as_type_mut<T: TypedWafObject>(&mut self) -> Option<&mut Keyed<T>> {
         if self.value.get_type() == T::TYPE {
             Some(unsafe { &mut *(std::ptr::from_mut(self).cast()) })
         } else {
@@ -1070,15 +1070,15 @@ impl Keyed<WAFObject> {
 }
 // Note - We are not implementing DerefMut for Keyed as it'd allow leaking the key if it is used
 // through [std::mem::take] or [std::mem::replace].
-impl Keyed<WAFArray> {
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut WAFObject> {
+impl Keyed<WafArray> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut WafObject> {
         self.value.iter_mut()
     }
 }
 // Note - We are not implementing DerefMut for Keyed as it'd allow leaking the key if it is used
 // through [std::mem::take] or [std::mem::replace].
-impl Keyed<WAFMap> {
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Keyed<WAFObject>> {
+impl Keyed<WafMap> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Keyed<WafObject>> {
         self.value.iter_mut()
     }
 }
@@ -1139,10 +1139,10 @@ where
         keyed
     }
 }
-impl<T: TypedWAFObject> From<Keyed<T>> for Keyed<WAFObject> {
+impl<T: TypedWafObject> From<Keyed<T>> for Keyed<WafObject> {
     fn from(value: Keyed<T>) -> Self {
         let res = Self {
-            value: WAFObject {
+            value: WafObject {
                 raw: *value.as_ref(),
             },
         };
@@ -1180,28 +1180,28 @@ impl crate::bindings::ddwaf_object {
         &mut *(std::ptr::from_mut(self).cast())
     }
 
-    /// Converts a naked reference to a [`bindings::ddwaf_object`] into a reference to an [`WAFObject`].
-    pub(crate) fn as_object_ref(&self) -> &WAFObject {
-        unsafe { self.unchecked_as_ref::<WAFObject>() }
+    /// Converts a naked reference to a [`bindings::ddwaf_object`] into a reference to an [`WafObject`].
+    pub(crate) fn as_object_ref(&self) -> &WafObject {
+        unsafe { self.unchecked_as_ref::<WafObject>() }
     }
 
     /// Converts a naked reference to a [`bindings::ddwaf_object`] into a reference to an opaque
-    /// [`Keyed<WAFObject>`].
-    pub(crate) fn as_keyed_object_ref(&self) -> &Keyed<WAFObject> {
-        // SAFETY: Keyed<WAFObject> is compatible with all valid [bindings::ddwaf_object] values,
+    /// [`Keyed<WafObject>`].
+    pub(crate) fn as_keyed_object_ref(&self) -> &Keyed<WafObject> {
+        // SAFETY: Keyed<WafObject> is compatible with all valid [bindings::ddwaf_object] values,
         // event if their key is not set.
-        unsafe { self.unchecked_as_ref::<Keyed<WAFObject>>() }
+        unsafe { self.unchecked_as_ref::<Keyed<WafObject>>() }
     }
 
     /// Converts a naked mutable reference to a [`bindings::ddwaf_object`] into a mutable reference to
-    /// an opaque [`Keyed<WAFObject>`].
+    /// an opaque [`Keyed<WafObject>`].
     ///
     /// # Safety
-    /// The caller must ensure that the destructor of [`Keyed<WAFObject>`]
+    /// The caller must ensure that the destructor of [`Keyed<WafObject>`]
     /// ([`bindings::ddwaf_object::drop_key`] and [`bindings::ddwaf_object::drop_object`]) can be called
     /// on self.
-    pub(crate) unsafe fn as_keyed_object_mut(&mut self) -> &mut Keyed<WAFObject> {
-        self.unchecked_as_ref_mut::<Keyed<WAFObject>>()
+    pub(crate) unsafe fn as_keyed_object_mut(&mut self) -> &mut Keyed<WafObject> {
+        self.unchecked_as_ref_mut::<Keyed<WafObject>>()
     }
 }
 
@@ -1225,25 +1225,25 @@ fn fmt_bin_str(bytes: &[u8]) -> impl fmt::Debug + '_ {
     BinFormatter(bytes)
 }
 
-/// Helper macro to create [`WAFObject`]s.
+/// Helper macro to create [`WafObject`]s.
 #[macro_export]
 macro_rules! waf_object {
     (null) => {
-        $crate::object::WAFObject::from(())
+        $crate::object::WafObject::from(())
     };
     ($l:expr) => {
-        $crate::object::WAFObject::from($l)
+        $crate::object::WafObject::from($l)
     };
 }
 
-/// Helper macro to create [`WAFArray`]s.
+/// Helper macro to create [`WafArray`]s.
 #[macro_export]
 macro_rules! waf_array {
-    () => { $crate::object::WAFArray::new(0) };
+    () => { $crate::object::WafArray::new(0) };
     ($($e:expr),* $(,)?) => {
         {
             let size = [$($crate::__repl_expr_with_unit!($e)),*].len();
-            let mut res = $crate::object::WAFArray::new(size as u64);
+            let mut res = $crate::object::WafArray::new(size as u64);
             let mut i = usize::MAX;
             $(
                 i = i.wrapping_add(1);
@@ -1254,19 +1254,19 @@ macro_rules! waf_array {
     };
 }
 
-/// Helper macro to create [`WAFMap`]s.
+/// Helper macro to create [`WafMap`]s.
 #[macro_export]
 macro_rules! waf_map {
-    () => { $crate::object::WAFMap::new(0) };
+    () => { $crate::object::WafMap::new(0) };
     ($(($k:literal, $v:expr)),* $(,)?) => {
         {
             let size = [$($crate::__repl_expr_with_unit!($v)),*].len();
-            let mut res = $crate::object::WAFMap::new(size as u64);
+            let mut res = $crate::object::WafMap::new(size as u64);
             let mut i = usize::MAX;
             $(
                 i = i.wrapping_add(1);
                 let k: &str = $k.into();
-                let obj = $crate::object::Keyed::<$crate::object::WAFObject>::from((k, $v));
+                let obj = $crate::object::Keyed::<$crate::object::WafObject>::from((k, $v));
                 res[i] = obj.into();
             )*
             res
@@ -1296,23 +1296,23 @@ mod tests {
     #[allow(clippy::float_cmp)] // No operations are done on the values, they should be the same.
     fn unsafe_changes_to_default_objects() {
         unsafe {
-            let mut unsigned = WAFUnsigned::default();
+            let mut unsigned = WafUnsigned::default();
             unsigned.as_raw_mut().__bindgen_anon_1.uintValue += 1;
             assert_eq!(unsigned.value(), 1);
 
-            let mut signed = WAFSigned::default();
+            let mut signed = WafSigned::default();
             signed.as_raw_mut().__bindgen_anon_1.intValue -= 1;
             assert_eq!(signed.value(), -1);
 
-            let mut float = WAFFloat::default();
+            let mut float = WafFloat::default();
             float.as_raw_mut().__bindgen_anon_1.f64_ += 1.0;
             assert_eq!(float.value(), 1.0);
 
-            let mut boolean = WAFBool::default();
+            let mut boolean = WafBool::default();
             boolean.as_raw_mut().__bindgen_anon_1.boolean = true;
             assert!(boolean.value());
 
-            let mut null = WAFNull::default();
+            let mut null = WafNull::default();
             // nothing interesting to do for null; let's try manually setting
             // the parameter name
             let s = String::from_str("foobar").unwrap();
@@ -1323,7 +1323,7 @@ mod tests {
             null_mut.parameterNameLength = s.len() as u64;
             drop(std::mem::take(null_mut.as_keyed_object_mut()));
 
-            let mut string = WAFString::default();
+            let mut string = WafString::default();
             let str_mut = string.as_raw_mut();
             let b: Box<[u8]> = s.as_bytes().into();
             let p = Box::<[u8]>::into_raw(b);

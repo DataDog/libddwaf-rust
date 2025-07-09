@@ -1,12 +1,12 @@
 use std::ptr::null_mut;
 
-use crate::object::{AsRawMutObject, WAFArray, WAFMap, WAFOwned};
+use crate::object::{AsRawMutObject, WafArray, WafMap, WafOwned};
 use crate::{Config, Handle};
 
 /// A builder for [Handle]s.
 ///
 /// This is used to maintain a live view over mutable configuration, and is best
-/// suited for cases where the WAF's configuration evolves regularly, such as
+/// suited for cases where the Waf's configuration evolves regularly, such as
 /// through remote configuration.
 #[repr(transparent)]
 pub struct Builder {
@@ -38,7 +38,7 @@ impl Builder {
         &mut self,
         path: &str,
         ruleset: &impl AsRef<crate::bindings::ddwaf_object>,
-        diagnostics: Option<&mut WAFOwned<WAFMap>>,
+        diagnostics: Option<&mut WafOwned<WafMap>>,
     ) -> bool {
         debug_assert!(
             !path.is_empty(),
@@ -98,8 +98,8 @@ impl Builder {
     /// # Panics
     /// Panics if the provided `filter` regular expression is longer than [`u32::MAX`] bytes.
     #[must_use]
-    pub fn config_paths(&self, filter: Option<&'_ str>) -> WAFOwned<WAFArray> {
-        let mut res = WAFOwned::<WAFArray>::default();
+    pub fn config_paths(&self, filter: Option<&'_ str>) -> WafOwned<WafArray> {
+        let mut res = WafOwned::<WafArray>::default();
         let filter = filter.unwrap_or("");
         let filter_len = u32::try_from(filter.len()).expect("filter is too long");
         let _ = unsafe {

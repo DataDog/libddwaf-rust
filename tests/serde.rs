@@ -1,7 +1,7 @@
 #![cfg(feature = "serde")]
 
 use libddwaf::{
-    object::{WAFArray, WAFMap, WAFObject, WAFObjectType},
+    object::{WafArray, WafMap, WafObject, WafObjectType},
     waf_array, waf_map, waf_object,
 };
 use serde_json::from_str;
@@ -10,32 +10,32 @@ use serde_json::from_str;
 fn sample_json_deserialization() {
     // Test for a simple unsigned integer
     let json = "42";
-    let ddwaf_obj: WAFObject = from_str(json).expect("Failed to deserialize u64");
+    let ddwaf_obj: WafObject = from_str(json).expect("Failed to deserialize u64");
     assert_eq!(ddwaf_obj.to_u64().unwrap(), 42);
 
     // Test for a signed integer
     let json = "-42";
-    let ddwaf_obj: WAFObject = from_str(json).expect("Failed to deserialize i64");
+    let ddwaf_obj: WafObject = from_str(json).expect("Failed to deserialize i64");
     assert_eq!(ddwaf_obj.to_i64().unwrap(), -42);
 
     // Test for a boolean
     let json = "true";
-    let ddwaf_obj: WAFObject = from_str(json).expect("Failed to deserialize bool");
+    let ddwaf_obj: WafObject = from_str(json).expect("Failed to deserialize bool");
     assert!(ddwaf_obj.to_bool().unwrap());
 
     // Test for null
     let json = "null";
-    let ddwaf_obj: WAFObject = from_str(json).expect("Failed to deserialize null");
-    assert_eq!(ddwaf_obj.get_type(), WAFObjectType::Null);
+    let ddwaf_obj: WafObject = from_str(json).expect("Failed to deserialize null");
+    assert_eq!(ddwaf_obj.get_type(), WafObjectType::Null);
 
     // Test for a string
     let json = "\"hello\"";
-    let ddwaf_obj: WAFObject = from_str(json).expect("Failed to deserialize string");
+    let ddwaf_obj: WafObject = from_str(json).expect("Failed to deserialize string");
     assert_eq!(ddwaf_obj.to_str().unwrap(), "hello");
 
     // Test for an array
     let json = "[1, 2, 3]";
-    let array: WAFArray = from_str::<WAFObject>(json)
+    let array: WafArray = from_str::<WafObject>(json)
         .expect("Failed to deserialize array")
         .try_into()
         .unwrap();
@@ -46,7 +46,7 @@ fn sample_json_deserialization() {
 
     // Test for a map
     let json = "{\"key1\": \"value1\", \"key2\": 42}";
-    let map: WAFMap = from_str::<WAFObject>(json)
+    let map: WafMap = from_str::<WafObject>(json)
         .expect("Failed to deserialize map")
         .try_into()
         .unwrap();
@@ -58,7 +58,7 @@ fn sample_json_deserialization() {
 #[test]
 fn map_deserialization_ok() {
     let json = "{\"key1\": 42, \"key2\": 43}";
-    let map: WAFMap = from_str::<WAFMap>(json).expect("Failed to deserialize map");
+    let map: WafMap = from_str::<WafMap>(json).expect("Failed to deserialize map");
     assert_eq!(map.len(), 2);
     assert_eq!(map.get_str("key1").unwrap().to_u64().unwrap(), 42);
     assert_eq!(map.get_str("key2").unwrap().to_u64().unwrap(), 43);
@@ -67,7 +67,7 @@ fn map_deserialization_ok() {
 #[test]
 fn map_deserialization_wrong_type() {
     let json = "[42]";
-    let maybe_map = from_str::<WAFMap>(json);
+    let maybe_map = from_str::<WafMap>(json);
 
     assert!(maybe_map.is_err());
     assert_eq!(

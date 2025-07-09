@@ -3,7 +3,7 @@ use std::fmt;
 use std::ptr::null_mut;
 use std::time::Duration;
 
-use crate::object::{AsRawMutObject, Keyed, WAFArray, WAFMap, WAFObject, WAFOwned};
+use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject, WafOwned};
 
 /// A WAF Context that can be used to evaluate the configured ruleset against address data.
 ///
@@ -11,7 +11,7 @@ use crate::object::{AsRawMutObject, Keyed, WAFArray, WAFMap, WAFObject, WAFOwned
 /// be used to handle data for a single request.
 pub struct Context {
     pub(crate) raw: crate::bindings::ddwaf_context,
-    pub(crate) keepalive: Vec<WAFMap>,
+    pub(crate) keepalive: Vec<WafMap>,
 }
 impl Context {
     /// Evaluates the configured ruleset against the provided address data, and returns the result
@@ -22,8 +22,8 @@ impl Context {
     /// the request.
     pub fn run(
         &mut self,
-        mut persistent_data: Option<WAFMap>,
-        ephemeral_data: Option<&WAFMap>,
+        mut persistent_data: Option<WafMap>,
+        ephemeral_data: Option<&WafMap>,
         timeout: Duration,
     ) -> Result<RunResult, RunError> {
         let mut res = std::mem::MaybeUninit::<RunOutput>::uninit();
@@ -126,7 +126,7 @@ impl error::Error for RunError {}
 /// The data produced by a [`Context::run`] operation.
 #[repr(transparent)]
 pub struct RunOutput {
-    data: WAFOwned<WAFMap>,
+    data: WafOwned<WafMap>,
 }
 impl RunOutput {
     /// Returns true if the WAF did not have enough time to process all the address data that was
@@ -165,30 +165,30 @@ impl RunOutput {
     /// Returns the list of events that were produced by this WAF run.
     ///
     /// This is only expected to be populated when [`Context::run`] returns [`RunResult::Match`].
-    pub fn events(&self) -> Option<&Keyed<WAFArray>> {
+    pub fn events(&self) -> Option<&Keyed<WafArray>> {
         debug_assert!(self.data.is_valid());
         self.data
             .get(b"events")
-            .and_then(Keyed::<WAFObject>::as_type)
+            .and_then(Keyed::<WafObject>::as_type)
     }
 
     /// Returns the list of actions that were produced by this WAF run.
     ///
     /// This is only expected to be populated when [`Context::run`] returns [`RunResult::Match`].
-    pub fn actions(&self) -> Option<&Keyed<WAFMap>> {
+    pub fn actions(&self) -> Option<&Keyed<WafMap>> {
         debug_assert!(self.data.is_valid());
         self.data
             .get(b"actions")
-            .and_then(Keyed::<WAFObject>::as_type)
+            .and_then(Keyed::<WafObject>::as_type)
     }
 
     /// Returns the list of attributes that were produced by this WAF run, and which should be
     /// attached to the surrounding trace.
-    pub fn attributes(&self) -> Option<&Keyed<WAFMap>> {
+    pub fn attributes(&self) -> Option<&Keyed<WafMap>> {
         debug_assert!(self.data.is_valid());
         self.data
             .get(b"attributes")
-            .and_then(Keyed::<WAFObject>::as_type)
+            .and_then(Keyed::<WafObject>::as_type)
     }
 }
 impl fmt::Debug for RunOutput {

@@ -13,11 +13,11 @@ use std::{
 };
 
 use libddwaf::{
-    object::{WAFArray, WAFMap, WAFObject, WAFOwned},
+    object::{WafArray, WafMap, WafObject, WafOwned},
     waf_array, waf_map, Builder, Config, RunResult,
 };
 
-static ARACHNI_RULE: LazyLock<WAFMap> = LazyLock::new(|| {
+static ARACHNI_RULE: LazyLock<WafMap> = LazyLock::new(|| {
     waf_map! {
         ("version", "2.1"),
         ("rules", waf_array![
@@ -51,7 +51,7 @@ static ARACHNI_RULE: LazyLock<WAFMap> = LazyLock::new(|| {
 #[test]
 fn basic_run_rule_with_match() {
     let mut builder = Builder::new(&Config::default()).expect("Failed to create builder");
-    let mut diagnostics = WAFOwned::<WAFMap>::default();
+    let mut diagnostics = WafOwned::<WafMap>::default();
     assert!(builder.add_or_update_config(
         "rules",
         LazyLock::force(&ARACHNI_RULE),
@@ -62,11 +62,11 @@ fn basic_run_rule_with_match() {
     let loaded_rule_name = diagnostics
         .get_str("rules")
         .unwrap()
-        .as_type::<WAFMap>()
+        .as_type::<WafMap>()
         .unwrap()
         .get_str("loaded")
         .unwrap()
-        .as_type::<WAFArray>()
+        .as_type::<WafArray>()
         .unwrap()[0]
         .to_str()
         .unwrap();
@@ -75,9 +75,9 @@ fn basic_run_rule_with_match() {
     let waf = builder.build().unwrap();
     let mut ctx = waf.new_context();
 
-    let mut header = WAFMap::new(1);
+    let mut header = WafMap::new(1);
     header[0] = ("user-agent", "Arachni").into();
-    let mut data = WAFMap::new(1);
+    let mut data = WafMap::new(1);
     data[0] = ("server.request.headers.no_cookies", header).into();
 
     let res = ctx.run(Some(data), None, Duration::from_secs(1));
@@ -90,8 +90,8 @@ fn basic_run_rule_with_match() {
 
             let events = result.events().expect("Expected some events");
             assert_eq!(events.len(), 1);
-            let first_event: &WAFMap = events[0].as_type().unwrap();
-            let rule_first_event: &WAFMap = first_event.get_str("rule").unwrap().as_type().unwrap();
+            let first_event: &WafMap = events[0].as_type().unwrap();
+            let rule_first_event: &WafMap = first_event.get_str("rule").unwrap().as_type().unwrap();
             assert_eq!(
                 rule_first_event.get_str("id").unwrap().to_str().unwrap(),
                 "arachni_rule"
@@ -110,7 +110,7 @@ fn basic_run_rule_with_match() {
 #[test]
 fn basic_run_rule_with_no_match() {
     let mut builder = Builder::new(&Config::default()).expect("Failed to create builder");
-    let mut diagnostics = WAFOwned::<WAFMap>::default();
+    let mut diagnostics = WafOwned::<WafMap>::default();
     assert!(builder.add_or_update_config(
         "rules",
         LazyLock::force(&ARACHNI_RULE),
@@ -121,11 +121,11 @@ fn basic_run_rule_with_no_match() {
     let loaded_rule_name = diagnostics
         .get_str("rules")
         .unwrap()
-        .as_type::<WAFMap>()
+        .as_type::<WafMap>()
         .unwrap()
         .get_str("loaded")
         .unwrap()
-        .as_type::<WAFArray>()
+        .as_type::<WafArray>()
         .unwrap()[0]
         .to_str()
         .unwrap();
@@ -134,9 +134,9 @@ fn basic_run_rule_with_no_match() {
     let waf = builder.build().unwrap();
     let mut ctx = waf.new_context();
 
-    let mut header = WAFMap::new(1);
+    let mut header = WafMap::new(1);
     header[0] = ("user-agent", "JDatabaseDriverMysqli").into();
-    let mut data = WAFMap::new(1);
+    let mut data = WafMap::new(1);
     data[0] = ("server.request.headers.no_cookies", header).into();
 
     let res = ctx.run(Some(data), None, Duration::from_secs(1));
@@ -169,12 +169,12 @@ fn run_rule_threaded() {
     assert!(builder.add_or_update_config("rules", LazyLock::force(&ARACHNI_RULE), None));
     let waf = Arc::new(builder.build().unwrap());
 
-    let mut header = WAFMap::new(1);
+    let mut header = WafMap::new(1);
     header[0] = ("user-agent", "Arachni").into();
-    let mut data = WAFMap::new(1);
+    let mut data = WafMap::new(1);
     data[0] = (
         "server.request.headers.no_cookies",
-        Into::<WAFObject>::into(header),
+        Into::<WafObject>::into(header),
     )
         .into();
     let adata = Arc::new(data);

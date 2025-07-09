@@ -1,4 +1,4 @@
-#![doc = "Implementations of [serde::Deserialize] for [object::WAFObject](crate::object::WAFObject) and [object::WAFMap](crate::object::WAFMap)."]
+#![doc = "Implementations of [serde::Deserialize] for [object::WafObject](crate::object::WafObject) and [object::WafMap](crate::object::WafMap)."]
 
 use std::borrow::Cow;
 
@@ -9,12 +9,12 @@ use serde::{
 };
 
 use crate::object::{
-    WAFArray, WAFBool, WAFFloat, WAFMap, WAFObject, WAFObjectType, WAFSigned, WAFString,
-    WAFUnsigned,
+    WafArray, WafBool, WafFloat, WafMap, WafObject, WafObjectType, WafSigned, WafString,
+    WafUnsigned,
 };
 
-impl<'de> serde::Deserialize<'de> for WAFObject {
-    fn deserialize<D>(deserializer: D) -> Result<WAFObject, D::Error>
+impl<'de> serde::Deserialize<'de> for WafObject {
+    fn deserialize<D>(deserializer: D) -> Result<WafObject, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -22,8 +22,8 @@ impl<'de> serde::Deserialize<'de> for WAFObject {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for WAFMap {
-    fn deserialize<D>(deserializer: D) -> Result<WAFMap, D::Error>
+impl<'de> serde::Deserialize<'de> for WafMap {
+    fn deserialize<D>(deserializer: D) -> Result<WafMap, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -36,11 +36,11 @@ impl<'de> serde::Deserialize<'de> for WAFMap {
 struct Visitor;
 
 impl<'de> serde::de::Visitor<'de> for Visitor {
-    type Value = WAFObject;
+    type Value = WafObject;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str(
-            "a valid WAFObject (unsigned, signed, string, array, map, bool, float, or null)",
+            "a valid WafObject (unsigned, signed, string, array, map, bool, float, or null)",
         )
     }
 
@@ -48,42 +48,42 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
     where
         E: Error,
     {
-        Ok(WAFObject::from(v))
+        Ok(WafObject::from(v))
     }
 
     fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(WAFObject::from(v))
+        Ok(WafObject::from(v))
     }
 
     fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(WAFObject::from(v))
+        Ok(WafObject::from(v))
     }
 
     fn visit_unit<E>(self) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(WAFObject::from(()))
+        Ok(WafObject::from(()))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(WAFObject::from(v))
+        Ok(WafObject::from(v))
     }
 
     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(WAFObject::from(WAFString::new(v)))
+        Ok(WafObject::from(WafString::new(v)))
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
@@ -94,7 +94,7 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
         while let Some(value) = seq.next_element()? {
             vec.push(value);
         }
-        let mut res = WAFArray::new(vec.len().try_into().unwrap());
+        let mut res = WafArray::new(vec.len().try_into().unwrap());
         for (i, v) in vec.into_iter().enumerate() {
             res[i] = v;
         }
@@ -105,12 +105,12 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
     where
         A: serde::de::MapAccess<'de>,
     {
-        let mut vec: Vec<(Cow<'de, str>, WAFObject)> =
+        let mut vec: Vec<(Cow<'de, str>, WafObject)> =
             map.size_hint().map(Vec::with_capacity).unwrap_or_default();
-        while let Some((key, value)) = map.next_entry::<Cow<'de, str>, WAFObject>()? {
+        while let Some((key, value)) = map.next_entry::<Cow<'de, str>, WafObject>()? {
             vec.push((key, value));
         }
-        let mut res = WAFMap::new(vec.len().try_into().unwrap());
+        let mut res = WafMap::new(vec.len().try_into().unwrap());
         for (i, (k, v)) in vec.into_iter().enumerate() {
             let key_str: &str = &k;
             res[i] = (key_str, v).into();
@@ -119,39 +119,39 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
     }
 }
 
-impl serde::Serialize for WAFObject {
+impl serde::Serialize for WafObject {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         match self.get_type() {
-            WAFObjectType::Unsigned => {
-                unsafe { self.as_type_unchecked::<WAFUnsigned>() }.serialize(serializer)
+            WafObjectType::Unsigned => {
+                unsafe { self.as_type_unchecked::<WafUnsigned>() }.serialize(serializer)
             }
-            WAFObjectType::Signed => {
-                unsafe { self.as_type_unchecked::<WAFSigned>() }.serialize(serializer)
+            WafObjectType::Signed => {
+                unsafe { self.as_type_unchecked::<WafSigned>() }.serialize(serializer)
             }
-            WAFObjectType::Bool => {
-                unsafe { self.as_type_unchecked::<WAFBool>() }.serialize(serializer)
+            WafObjectType::Bool => {
+                unsafe { self.as_type_unchecked::<WafBool>() }.serialize(serializer)
             }
-            WAFObjectType::Float => {
-                unsafe { self.as_type_unchecked::<WAFFloat>() }.serialize(serializer)
+            WafObjectType::Float => {
+                unsafe { self.as_type_unchecked::<WafFloat>() }.serialize(serializer)
             }
-            WAFObjectType::String => {
-                unsafe { self.as_type_unchecked::<WAFString>() }.serialize(serializer)
+            WafObjectType::String => {
+                unsafe { self.as_type_unchecked::<WafString>() }.serialize(serializer)
             }
-            WAFObjectType::Array => {
-                unsafe { self.as_type_unchecked::<WAFArray>() }.serialize(serializer)
+            WafObjectType::Array => {
+                unsafe { self.as_type_unchecked::<WafArray>() }.serialize(serializer)
             }
-            WAFObjectType::Map => {
-                unsafe { self.as_type_unchecked::<WAFMap>() }.serialize(serializer)
+            WafObjectType::Map => {
+                unsafe { self.as_type_unchecked::<WafMap>() }.serialize(serializer)
             }
-            WAFObjectType::Null | WAFObjectType::Invalid => serializer.serialize_unit(),
+            WafObjectType::Null | WafObjectType::Invalid => serializer.serialize_unit(),
         }
     }
 }
 
-impl serde::Serialize for WAFUnsigned {
+impl serde::Serialize for WafUnsigned {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -160,7 +160,7 @@ impl serde::Serialize for WAFUnsigned {
     }
 }
 
-impl serde::Serialize for WAFSigned {
+impl serde::Serialize for WafSigned {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -169,7 +169,7 @@ impl serde::Serialize for WAFSigned {
     }
 }
 
-impl serde::Serialize for WAFBool {
+impl serde::Serialize for WafBool {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -178,7 +178,7 @@ impl serde::Serialize for WAFBool {
     }
 }
 
-impl serde::Serialize for WAFFloat {
+impl serde::Serialize for WafFloat {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -187,7 +187,7 @@ impl serde::Serialize for WAFFloat {
     }
 }
 
-impl serde::Serialize for WAFString {
+impl serde::Serialize for WafString {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -196,7 +196,7 @@ impl serde::Serialize for WAFString {
     }
 }
 
-impl serde::Serialize for WAFArray {
+impl serde::Serialize for WafArray {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -209,7 +209,7 @@ impl serde::Serialize for WAFArray {
     }
 }
 
-impl serde::Serialize for WAFMap {
+impl serde::Serialize for WafMap {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
