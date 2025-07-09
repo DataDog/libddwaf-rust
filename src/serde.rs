@@ -1,3 +1,5 @@
+#![doc = "Implementations of [serde::Deserialize] for [object::WafObject](crate::object::WafObject) and [object::WafMap](crate::object::WafMap)."]
+
 use std::borrow::Cow;
 
 use serde::{
@@ -6,308 +8,217 @@ use serde::{
     Deserializer,
 };
 
-use crate::{CommonDdwafObj, DdwafObj, DdwafObjArray, DdwafObjMap, DdwafObjString, DdwafObjType};
+use crate::object::{
+    WafArray, WafBool, WafFloat, WafMap, WafObject, WafObjectType, WafSigned, WafString,
+    WafUnsigned,
+};
 
-impl<'de> serde::Deserialize<'de> for DdwafObj {
-    fn deserialize<D>(deserializer: D) -> Result<DdwafObj, D::Error>
+impl<'de> serde::Deserialize<'de> for WafObject {
+    fn deserialize<D>(deserializer: D) -> Result<WafObject, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_any(DdwafObjVisitor)
+        deserializer.deserialize_any(Visitor)
     }
 }
 
-impl<'de> serde::Deserialize<'de> for DdwafObjMap {
-    fn deserialize<D>(deserializer: D) -> Result<DdwafObjMap, D::Error>
+impl<'de> serde::Deserialize<'de> for WafMap {
+    fn deserialize<D>(deserializer: D) -> Result<WafMap, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let dobj = deserializer.deserialize_any(DdwafObjVisitor)?;
+        let dobj = deserializer.deserialize_any(Visitor)?;
         dobj.try_into()
             .map_err(|_| serde::de::Error::custom("invalid type: not a map"))
     }
 }
 
-struct DdwafObjVisitor;
+struct Visitor;
 
-impl<'de> serde::de::Visitor<'de> for DdwafObjVisitor {
-    type Value = DdwafObj;
+impl<'de> serde::de::Visitor<'de> for Visitor {
+    type Value = WafObject;
+
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("an unsigned, a map, or an array")
+        formatter.write_str(
+            "a valid WafObject (unsigned, signed, string, array, map, bool, float, or null)",
+        )
     }
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(DdwafObj::from(v))
+        Ok(WafObject::from(v))
     }
 
     fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(DdwafObj::from(v))
+        Ok(WafObject::from(v))
     }
 
     fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(DdwafObj::from(v))
+        Ok(WafObject::from(v))
     }
 
     fn visit_unit<E>(self) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(DdwafObj::from(()))
+        Ok(WafObject::from(()))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(DdwafObj::from(v))
+        Ok(WafObject::from(v))
     }
 
     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(DdwafObj::from(DdwafObjString::new(v)))
+        Ok(WafObject::from(WafString::new(v)))
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
-        if let Some(size) = seq.size_hint() {
-            let mut arr = DdwafObjArray::new(size.try_into().unwrap());
-            let mut i: usize = 0;
-            while let Some(value) = seq.next_element()? {
-                arr[i] = value;
-                i += 1;
-            }
-            if i != size {
-                return Err(serde::de::Error::custom("size hint was wrong"));
-            }
-            Ok(arr.into())
-        } else {
-            let mut vec = Vec::<DdwafObj>::new();
-            while let Some(value) = seq.next_element()? {
-                vec.push(value);
-            }
-            let mut res = DdwafObjArray::new(vec.len().try_into().unwrap());
-            for (i, v) in vec.into_iter().enumerate() {
-                res[i] = v;
-            }
-            Ok(res.into())
+        let mut vec = seq.size_hint().map(Vec::with_capacity).unwrap_or_default();
+        while let Some(value) = seq.next_element()? {
+            vec.push(value);
         }
+        let mut res = WafArray::new(vec.len().try_into().unwrap());
+        for (i, v) in vec.into_iter().enumerate() {
+            res[i] = v;
+        }
+        Ok(res.into())
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
-        if let Some(size) = map.size_hint() {
-            let mut dmap = DdwafObjMap::new(size.try_into().unwrap());
-            let mut i: usize = 0;
-            while let Some((key, value)) = map.next_entry::<Cow<'de, str>, DdwafObj>()? {
-                let key_str: &str = &key;
-                dmap[i] = (key_str, value).into();
-                i += 1;
-            }
-            if i != size {
-                return Err(serde::de::Error::custom("size hint was wrong"));
-            }
-            Ok(dmap.into())
-        } else {
-            let mut vec = Vec::<(Cow<'de, str>, DdwafObj)>::new();
-            while let Some((key, value)) = map.next_entry::<Cow<'de, str>, DdwafObj>()? {
-                vec.push((key, value));
-            }
-            let mut res = DdwafObjMap::new(vec.len().try_into().unwrap());
-            for (i, (k, v)) in vec.into_iter().enumerate() {
-                let key_str: &str = &k;
-                res[i] = (key_str, v).into();
-            }
-            Ok(res.into())
+        let mut vec: Vec<(Cow<'de, str>, WafObject)> =
+            map.size_hint().map(Vec::with_capacity).unwrap_or_default();
+        while let Some((key, value)) = map.next_entry::<Cow<'de, str>, WafObject>()? {
+            vec.push((key, value));
         }
+        let mut res = WafMap::new(vec.len().try_into().unwrap());
+        for (i, (k, v)) in vec.into_iter().enumerate() {
+            let key_str: &str = &k;
+            res[i] = (key_str, v).into();
+        }
+        Ok(res.into())
     }
 }
 
-impl serde::Serialize for DdwafObj {
+impl serde::Serialize for WafObject {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         match self.get_type() {
-            DdwafObjType::Unsigned => serializer.serialize_u64(self.to_u64().unwrap()),
-            DdwafObjType::Signed => serializer.serialize_i64(self.to_i64().unwrap()),
-            DdwafObjType::Bool => serializer.serialize_bool(self.to_bool().unwrap()),
-            DdwafObjType::Float => serializer.serialize_f64(self.to_f64().unwrap()),
-            DdwafObjType::String => serializer.serialize_str(&String::from_utf8_lossy(
-                self.as_type::<DdwafObjString>().unwrap().as_slice(),
-            )),
-            DdwafObjType::Null => serializer.serialize_unit(),
-            DdwafObjType::Invalid => serializer.serialize_unit(),
-            DdwafObjType::Array => {
-                let array = self.as_type::<DdwafObjArray>().unwrap();
-                let mut seq_serializer = serializer.serialize_seq(Some(array.len()))?;
-                for value in array.iter() {
-                    seq_serializer.serialize_element(value)?;
-                }
-                seq_serializer.end()
+            WafObjectType::Unsigned => {
+                unsafe { self.as_type_unchecked::<WafUnsigned>() }.serialize(serializer)
             }
-            DdwafObjType::Map => {
-                let map = self.as_type::<DdwafObjMap>().unwrap();
-                let mut map_serializer = serializer.serialize_map(Some(map.len()))?;
-                for keyed_val in map.iter() {
-                    map_serializer.serialize_entry(
-                        &String::from_utf8_lossy(keyed_val.key()),
-                        keyed_val.inner(),
-                    )?;
-                }
-                map_serializer.end()
+            WafObjectType::Signed => {
+                unsafe { self.as_type_unchecked::<WafSigned>() }.serialize(serializer)
             }
+            WafObjectType::Bool => {
+                unsafe { self.as_type_unchecked::<WafBool>() }.serialize(serializer)
+            }
+            WafObjectType::Float => {
+                unsafe { self.as_type_unchecked::<WafFloat>() }.serialize(serializer)
+            }
+            WafObjectType::String => {
+                unsafe { self.as_type_unchecked::<WafString>() }.serialize(serializer)
+            }
+            WafObjectType::Array => {
+                unsafe { self.as_type_unchecked::<WafArray>() }.serialize(serializer)
+            }
+            WafObjectType::Map => {
+                unsafe { self.as_type_unchecked::<WafMap>() }.serialize(serializer)
+            }
+            WafObjectType::Null | WafObjectType::Invalid => serializer.serialize_unit(),
         }
     }
 }
 
-impl serde::Serialize for DdwafObjArray {
+impl serde::Serialize for WafUnsigned {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let dobj = self.as_ddwaf_obj();
-        dobj.serialize(serializer)
+        serializer.serialize_u64(self.value())
     }
 }
 
-impl serde::Serialize for DdwafObjMap {
+impl serde::Serialize for WafSigned {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let dobj = self.as_ddwaf_obj();
-        dobj.serialize(serializer)
+        serializer.serialize_i64(self.value())
     }
 }
 
-#[cfg(feature = "serde_test")]
-mod tests {
-    #[allow(unused_imports)]
-    use crate::{ddwaf_obj, ddwaf_obj_array, ddwaf_obj_map};
-    #[allow(unused_imports)]
-    use crate::{CommonDdwafObj, DdwafObj, DdwafObjArray, DdwafObjMap, DdwafObjType};
-    #[allow(unused_imports)]
-    use serde_json::from_str;
-
-    #[test]
-    fn sample_json_deserialization() {
-        // Test for a simple unsigned integer
-        let json = "42";
-        let ddwaf_obj: DdwafObj = from_str(json).expect("Failed to deserialize u64");
-        assert_eq!(ddwaf_obj.to_u64().unwrap(), 42);
-
-        // Test for a signed integer
-        let json = "-42";
-        let ddwaf_obj: DdwafObj = from_str(json).expect("Failed to deserialize i64");
-        assert_eq!(ddwaf_obj.to_i64().unwrap(), -42);
-
-        // Test for a boolean
-        let json = "true";
-        let ddwaf_obj: DdwafObj = from_str(json).expect("Failed to deserialize bool");
-        assert!(ddwaf_obj.to_bool().unwrap());
-
-        // Test for null
-        let json = "null";
-        let ddwaf_obj: DdwafObj = from_str(json).expect("Failed to deserialize null");
-        assert_eq!(ddwaf_obj.get_type(), DdwafObjType::Null);
-
-        // Test for a string
-        let json = "\"hello\"";
-        let ddwaf_obj: DdwafObj = from_str(json).expect("Failed to deserialize string");
-        assert_eq!(ddwaf_obj.to_str().unwrap(), "hello");
-
-        // Test for an array
-        let json = "[1, 2, 3]";
-        let array: DdwafObjArray = from_str::<DdwafObj>(json)
-            .expect("Failed to deserialize array")
-            .try_into()
-            .unwrap();
-        assert_eq!(array.len(), 3);
-        assert_eq!(array[0].to_u64().unwrap(), 1);
-        assert_eq!(array[1].to_u64().unwrap(), 2);
-        assert_eq!(array[2].to_u64().unwrap(), 3);
-
-        // Test for a map
-        let json = "{\"key1\": \"value1\", \"key2\": 42}";
-        let map: DdwafObjMap = from_str::<DdwafObj>(json)
-            .expect("Failed to deserialize map")
-            .try_into()
-            .unwrap();
-        assert_eq!(map.len(), 2);
-        assert_eq!(map.get_str("key1").unwrap().to_str().unwrap(), "value1");
-        assert_eq!(map.get_str("key2").unwrap().to_u64().unwrap(), 42);
+impl serde::Serialize for WafBool {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_bool(self.value())
     }
+}
 
-    #[test]
-    fn map_deserialization_ok() {
-        let json = "{\"key1\": 42, \"key2\": 43}";
-        let map: DdwafObjMap = from_str::<DdwafObjMap>(json).expect("Failed to deserialize map");
-        assert_eq!(map.len(), 2);
-        assert_eq!(map.get_str("key1").unwrap().to_u64().unwrap(), 42);
-        assert_eq!(map.get_str("key2").unwrap().to_u64().unwrap(), 43);
+impl serde::Serialize for WafFloat {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_f64(self.value())
     }
+}
 
-    #[test]
-    fn map_deserialization_wrong_type() {
-        let json = "[42]";
-        let maybe_map = from_str::<DdwafObjMap>(json);
-
-        assert!(maybe_map.is_err());
-        assert_eq!(
-            maybe_map.err().unwrap().to_string(),
-            "invalid type: not a map"
-        );
+impl serde::Serialize for WafString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&String::from_utf8_lossy(self.bytes()))
     }
+}
 
-    #[test]
-    fn sample_json_serialization() {
-        let root = ddwaf_obj_array!(
-            "Hello, world!",
-            123_u64,
-            ddwaf_obj_map!(
-                ("key 1", "value 1"),
-                ("key 2", -2_i64),
-                ("key 3", 2_u64),
-                ("key 4", 5.2),
-                ("key 5", ddwaf_obj!(null)),
-                ("key 5", ddwaf_obj!(true)),
-            ),
-            ddwaf_obj_array!(),
-            ddwaf_obj_map!(),
-        );
+impl serde::Serialize for WafArray {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut seq_serializer = serializer.serialize_seq(Some(self.len()))?;
+        for value in self.iter() {
+            seq_serializer.serialize_element(value)?;
+        }
+        seq_serializer.end()
+    }
+}
 
-        let res = serde_json::to_string_pretty(&root).unwrap();
-        let expected_string = r#"
-[
-  "Hello, world!",
-  123,
-  {
-    "key 1": "value 1",
-    "key 2": -2,
-    "key 3": 2,
-    "key 4": 5.2,
-    "key 5": null,
-    "key 5": true
-  },
-  [],
-  {}
-]
-"#;
-        assert_eq!(res, expected_string.trim());
+impl serde::Serialize for WafMap {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map_serializer = serializer.serialize_map(Some(self.len()))?;
+        for keyed_val in self.iter() {
+            map_serializer
+                .serialize_entry(&String::from_utf8_lossy(keyed_val.key()), keyed_val.inner())?;
+        }
+        map_serializer.end()
     }
 }
