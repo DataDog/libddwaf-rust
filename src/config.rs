@@ -56,6 +56,7 @@ impl Obfuscator {
             CString::new(s).expect("Invalid value regex").into_raw()
         });
         Self {
+            #[allow(clippy::used_underscore_items)]
             raw: crate::bindings::_ddwaf_config__ddwaf_config_obfuscator {
                 key_regex,
                 value_regex,

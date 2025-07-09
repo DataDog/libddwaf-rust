@@ -24,7 +24,7 @@ fn main() {
     let lib_dir = download_dir.join("lib");
 
     // Download the archive
-    let override_archive = PathBuf::from(manifest_dir)
+    let override_archive = PathBuf::from(&manifest_dir)
         .join("target")
         .join("libddwaf.tar.gz");
     let archive: Box<dyn io::Read> = if fs::exists(&override_archive).unwrap_or_default() {

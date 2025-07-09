@@ -1,9 +1,9 @@
 #![doc = "Data model for exchanging data with the in-app WAF."]
 
 use std::alloc::Layout;
-use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::ptr::null_mut;
+use std::{cmp, fmt};
 
 use crate::bindings;
 
@@ -331,6 +331,11 @@ impl<T: TypedWafObject> From<T> for WafObject {
         res
     }
 }
+impl<T: AsRef<bindings::ddwaf_object>> cmp::PartialEq<T> for WafObject {
+    fn eq(&self, other: &T) -> bool {
+        self.raw == *other.as_ref()
+    }
+}
 impl crate::private::Sealed for WafObject {}
 
 /// A WAF-owned [`WafObject`] or [`TypedWafObject`] value.
@@ -441,6 +446,11 @@ macro_rules! typed_object {
                 Ok(res)
             }
         }
+        impl<T: AsRef<bindings::ddwaf_object>> cmp::PartialEq<T> for $name {
+            fn eq(&self, other: &T) -> bool {
+                self.raw == *other.as_ref()
+            }
+        }
         impl crate::private::Sealed for $name {}
         impl TypedWafObject for $name {
             const TYPE: WafObjectType = $type;
@@ -456,6 +466,7 @@ typed_object!(WafObjectType::Signed => WafSigned {
         Self {
             raw: bindings::ddwaf_object {
                 type_: bindings::DDWAF_OBJ_SIGNED,
+                #[allow(clippy::used_underscore_items)]
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { intValue: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
@@ -477,6 +488,7 @@ typed_object!(WafObjectType::Unsigned => WafUnsigned {
         Self {
             raw: bindings::ddwaf_object {
                 type_: bindings::DDWAF_OBJ_UNSIGNED,
+                #[allow(clippy::used_underscore_items)]
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { uintValue: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
@@ -504,6 +516,7 @@ typed_object!(WafObjectType::String => WafString {
         Self {
             raw: bindings::ddwaf_object {
                 type_: bindings::DDWAF_OBJ_STRING,
+                #[allow(clippy::used_underscore_items)]
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 {
                     stringValue: ptr,
                 },
@@ -570,6 +583,7 @@ typed_object!(WafObjectType::Array => WafArray {
         Self {
             raw: bindings::ddwaf_object {
                 type_: bindings::DDWAF_OBJ_ARRAY,
+                #[allow(clippy::used_underscore_items)]
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { array },
                 nbEntries: nb_entries,
                 ..Default::default()
@@ -621,6 +635,7 @@ typed_object!(WafObjectType::Map => WafMap {
         Self {
             raw: bindings::ddwaf_object {
                 type_: bindings::DDWAF_OBJ_MAP,
+                #[allow(clippy::used_underscore_items)]
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 {  array },
                 nbEntries: nb_entries,
                 ..Default::default()
@@ -699,6 +714,7 @@ typed_object!(WafObjectType::Bool => WafBool {
         Self {
             raw: bindings::ddwaf_object {
                 type_: bindings::DDWAF_OBJ_BOOL,
+                #[allow(clippy::used_underscore_items)]
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { boolean: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
@@ -720,6 +736,7 @@ typed_object!(WafObjectType::Float => WafFloat {
         Self {
             raw: bindings::ddwaf_object {
                 type_: bindings::DDWAF_OBJ_FLOAT,
+                #[allow(clippy::used_underscore_items)]
                 __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { f64_: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
@@ -740,6 +757,7 @@ typed_object!(WafObjectType::Null => WafNull {
     pub const fn new() -> Self {
         Self { raw: bindings::ddwaf_object {
             type_: bindings::DDWAF_OBJ_NULL,
+            #[allow(clippy::used_underscore_items)]
             __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { uintValue: 0},
             nbEntries: 0,
             parameterName: null_mut(),
@@ -1071,6 +1089,10 @@ impl Keyed<WafObject> {
 // Note - We are not implementing DerefMut for Keyed as it'd allow leaking the key if it is used
 // through [std::mem::take] or [std::mem::replace].
 impl Keyed<WafArray> {
+    pub fn iter(&self) -> impl Iterator<Item = &WafObject> {
+        self.value.iter()
+    }
+
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut WafObject> {
         self.value.iter_mut()
     }
@@ -1078,6 +1100,10 @@ impl Keyed<WafArray> {
 // Note - We are not implementing DerefMut for Keyed as it'd allow leaking the key if it is used
 // through [std::mem::take] or [std::mem::replace].
 impl Keyed<WafMap> {
+    pub fn iter(&self) -> impl Iterator<Item = &Keyed<WafObject>> {
+        self.value.iter()
+    }
+
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Keyed<WafObject>> {
         self.value.iter_mut()
     }
