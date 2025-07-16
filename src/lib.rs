@@ -1,11 +1,10 @@
-#![warn(
+#![deny(
     clippy::correctness,
     clippy::pedantic,
     clippy::perf,
     clippy::style,
     clippy::suspicious
 )]
-#![allow(clippy::used_underscore_binding, clippy::used_underscore_items)]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 //! Rust bindings for the [`libddwaf` library](https://github.com/DataDog/libddwaf).

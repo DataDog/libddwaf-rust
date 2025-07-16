@@ -40,6 +40,64 @@ fn defaults() {
 }
 
 #[test]
+fn test_eq() {
+    let invalid = WafObject::default();
+    let string = WafString::default();
+    let bool = WafBool::default();
+    let float = WafFloat::default();
+    let signed = WafSigned::default();
+    let unsigned = WafUnsigned::default();
+    let array = WafArray::default();
+    let map = WafMap::default();
+    let null = WafNull::default();
+
+    assert_eq!(invalid, invalid);
+    assert_eq!(string, string);
+    assert_eq!(bool, bool);
+    assert_eq!(float, float);
+    assert_eq!(signed, signed);
+    assert_eq!(unsigned, unsigned);
+    assert_eq!(array, array);
+    assert_eq!(map, map);
+    assert_eq!(null, null);
+
+    assert_ne!(invalid, string);
+    assert_ne!(invalid, bool);
+    assert_ne!(invalid, float);
+    assert_ne!(invalid, signed);
+    assert_ne!(invalid, unsigned);
+    assert_ne!(invalid, array);
+    assert_ne!(invalid, map);
+
+    assert_ne!(string, bool);
+    assert_ne!(string, float);
+    assert_ne!(string, signed);
+    assert_ne!(string, unsigned);
+    assert_ne!(string, array);
+    assert_ne!(string, map);
+
+    assert_ne!(bool, float);
+    assert_ne!(bool, signed);
+    assert_ne!(bool, unsigned);
+    assert_ne!(bool, array);
+    assert_ne!(bool, map);
+
+    assert_ne!(float, signed);
+    assert_ne!(float, unsigned);
+    assert_ne!(float, array);
+    assert_ne!(float, map);
+
+    assert_ne!(signed, unsigned);
+    assert_ne!(signed, array);
+    assert_ne!(signed, map);
+
+    assert_ne!(unsigned, array);
+    assert_ne!(unsigned, map);
+
+    assert_ne!(array, map);
+}
+
+#[test]
 fn sample_mixed_object() {
     let mut root = WafArray::new(4);
     root[0] = 42_u64.into();
