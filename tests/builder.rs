@@ -5,7 +5,7 @@ use libddwaf::{
 
 #[test]
 pub fn blank_config() {
-    let builder = Builder::new(&Config::default()).expect("builder should be created");
+    let mut builder = Builder::new(&Config::default()).expect("builder should be created");
     // Not adding any rules, so we can't get a handle...
     assert!(builder.build().is_none());
 }

@@ -79,7 +79,7 @@ impl Builder {
     /// # Panics
     /// Panics if the provided `filter` regular expression is longer than [`u32::MAX`] bytes.
     #[must_use]
-    pub fn config_paths_count(&self, filter: Option<&'_ str>) -> u32 {
+    pub fn config_paths_count(&mut self, filter: Option<&'_ str>) -> u32 {
         let filter = filter.unwrap_or("");
         let filter_len = u32::try_from(filter.len()).expect("filter is too long");
         unsafe {
@@ -98,7 +98,7 @@ impl Builder {
     /// # Panics
     /// Panics if the provided `filter` regular expression is longer than [`u32::MAX`] bytes.
     #[must_use]
-    pub fn config_paths(&self, filter: Option<&'_ str>) -> WafOwned<WafArray> {
+    pub fn config_paths(&mut self, filter: Option<&'_ str>) -> WafOwned<WafArray> {
         let mut res = WafOwned::<WafArray>::default();
         let filter = filter.unwrap_or("");
         let filter_len = u32::try_from(filter.len()).expect("filter is too long");
@@ -118,7 +118,7 @@ impl Builder {
     /// Returns [None] if the builder fails to create a new [Handle], meaning the current
     /// configuration contains no active instructions (no rules nor processors are available).
     #[must_use]
-    pub fn build(&self) -> Option<Handle> {
+    pub fn build(&mut self) -> Option<Handle> {
         let raw = unsafe { crate::bindings::ddwaf_builder_build_instance(self.raw) };
         if raw.is_null() {
             return None;
