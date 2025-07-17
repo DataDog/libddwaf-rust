@@ -2,12 +2,33 @@ use std::env;
 use std::fs::{self, File};
 use std::io;
 use std::path::PathBuf;
+use std::process::{exit, Command};
 
 use flate2::read::GzDecoder;
 use reqwest::blocking::get;
 use tar::Archive;
 
 fn main() {
+    if std::env::var("CARGO_FEATURE_FIPS").is_ok() {
+        println!("cargo:warning=FIPS feature is enabled, checking for forbidden dependencies...");
+
+        // List of dependencies that are not FIPS compliant
+        let forbidden_dependencies = vec!["ring", "openssl", "boringssl"];
+
+        // Check each forbidden dependency
+        for dependency in &forbidden_dependencies {
+            if let Err(error_msg) = check_forbidden_dependency(dependency) {
+                println!("cargo:error={error_msg}");
+                exit(-1);
+            }
+        }
+        println!("cargo:warning=All dependency checks passed. No forbidden dependencies found!");
+    }
+
+    // Ensure reqwest is able to use a crypto provider (no default is set so it's easier to maintain FIPS compliance)
+    rustls::crypto::CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider())
+        .expect("Failed to set rustls default crypto provider");
+
     // Read the Rust crate version from the environment variable set by Cargo
     let version =
         env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION environment variable not set");
@@ -134,4 +155,75 @@ fn main() {
         "cargo:rerun-if-changed={}",
         include_dir.join("ddwaf.h").to_str().unwrap()
     );
+}
+
+/// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.
+fn check_forbidden_dependency(dependency_name: &str) -> Result<(), String> {
+    println!("cargo:warning=Checking for {dependency_name} dependency...");
+
+    // First run cargo tree to get dependency with detailed info
+    let output = Command::new("cargo")
+        .args([
+            "tree",
+            "-i",
+            dependency_name,
+            "--format={p} {f}",
+            "--prefix=none",
+            "--features=fips",
+            "--no-default-features",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to execute cargo tree command for {dependency_name}: {e}"))?;
+
+    // Also get the complete dependency path to help debugging
+    let path_output = Command::new("cargo")
+        .args([
+            "tree",
+            "-i",
+            dependency_name,
+            "--edges=features",
+            "--features=fips",
+            "--no-default-features",
+        ])
+        .output()
+        .map_err(|e| {
+            format!("Failed to execute detailed cargo tree command for {dependency_name}: {e}")
+        })?;
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let dependency_pattern = format!("{dependency_name} v");
+
+    // Check if the dependency is in the dependency tree
+    if output_str.contains(&dependency_pattern) {
+        // Get the dependency paths
+        let deps: Vec<&str> = output_str
+            .lines()
+            .filter(|line| line.contains(&dependency_pattern))
+            .collect();
+
+        // Get the detailed dependency path
+        let path_str = String::from_utf8_lossy(&path_output.stdout);
+
+        // Create detailed error message with dependency paths
+        let error_msg = format!(
+            "\n\nERROR: {dependency_name} dependency detected with FIPS feature enabled!\n\
+            FIPS compliance requires eliminating this dependency.\n\
+            \n\
+            {dependency_name} dependency versions and features:\n{deps}\n\
+            \n\
+            Detailed dependency paths to {dependency_name}:\n{path_str}\n\
+            \n\
+            Ensure all dependencies use aws-lc-rs instead of non-FIPS compliant cryptographic libraries.\n\
+            Consider updating the following in your Cargo.toml:\n\
+            1. Ensure all dependencies that use rustls have the 'aws-lc-rs' feature\n\
+            2. Check transitive dependencies in reqwest, hyper-rustls, etc.\n\
+            3. Update your dependencies to versions that support FIPS mode\n",
+            deps = deps.join("\n"),
+        );
+
+        Err(error_msg)
+    } else {
+        println!("cargo:warning=No {dependency_name} dependency found. FIPS compliance check passed for this dependency!");
+        Ok(())
+    }
 }
