@@ -1,0 +1,30 @@
+[package]
+name = "libddwaf-sys"
+version = "1.26.0"
+description = "Low-level bindings to DataDog/libddwaf"
+
+links = "ddwaf"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+libc = "0.2"
+
+[build-dependencies]
+bindgen = "0.72"
+flate2 = "1.1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "http2", "rustls-tls-native-roots-no-provider"] }
+tar = "0.4"
+# Following is to ensure FIPS compliance is possible.
+hyper-rustls = { version = "*", default-features = false, features = ["aws-lc-rs"] }
+rustls = { version = "*", default-features = false, features= ["aws-lc-rs"] }
+
+[features]
+default = []
+fips = ["hyper-rustls/fips", "rustls/fips"]
+
+[lints]
+workspace = true

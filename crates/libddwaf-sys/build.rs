@@ -32,8 +32,6 @@ fn main() {
     // Read the Rust crate version from the environment variable set by Cargo
     let version =
         env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION environment variable not set");
-    let manifest_dir =
-        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR environment variable not set");
 
     // Target triple for the current build
     let target = env::var("TARGET").expect("TARGET environment variable not set");
@@ -45,12 +43,18 @@ fn main() {
     let lib_dir = download_dir.join("lib");
 
     // Download the archive
-    let override_archive = PathBuf::from(&manifest_dir)
-        .join("target")
-        .join("libddwaf.tar.gz");
-    let archive: Box<dyn io::Read> = if fs::exists(&override_archive).unwrap_or_default() {
+    println!("cargo:rerun-if-env-changed=LIBDDWAF_SYS_ARCHIVE_PATH_OVERRIDE");
+    let (archive, is_override): (Box<dyn io::Read>, _) = if let Ok(override_archive) =
+        env::var("LIBDDWAF_SYS_ARCHIVE_PATH_OVERRIDE")
+    {
         println!("cargo:warning=Using local archive at {override_archive:?}");
-        Box::new(fs::File::open(&override_archive).unwrap())
+        (
+            Box::new(
+                fs::File::open(&override_archive)
+                    .expect("failed to open file at $LIBDDWAF_SYS_ARCHIVE_PATH_OVERRIDE"),
+            ),
+            true,
+        )
     } else {
         // Base URL for downloading the library
         let base_url = "https://github.com/DataDog/libddwaf/releases/download";
@@ -71,13 +75,14 @@ fn main() {
 
         // Construct the download URL
         let archive_url = format!("{base_url}/{version}/{archive_name}");
-
-        Box::new(get(&archive_url).expect("Failed to download archive"))
+        (
+            Box::new(get(&archive_url).expect("Failed to download archive")),
+            false,
+        )
     };
-    println!("cargo:rerun-if-changed={override_archive:?}");
 
     // Extract the archive
-    if !include_dir.exists() || !lib_dir.exists() {
+    if is_override || !include_dir.exists() || !lib_dir.exists() {
         fs::create_dir_all(&download_dir).expect("Failed to create extraction directory");
 
         let reader = GzDecoder::new(archive);
@@ -116,9 +121,10 @@ fn main() {
     );
     println!("cargo:rustc-link-lib=dylib=ddwaf");
 
-    // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a
+    // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a/.so.
     #[cfg(target_os = "macos")]
     println!("cargo::rustc-link-lib=c++");
+    // println!("cargo::rustc-link-lib=c++abi");
 
     // if we want to disable this in final binaries, see maybe
     // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
@@ -136,10 +142,11 @@ fn main() {
     // Generate bindings with bindgen
     let bindings = bindgen::Builder::default()
         .header(include_dir.join("ddwaf.h").to_str().unwrap())
+        .override_abi(bindgen::Abi::CUnwind, ".*")
         .allowlist_item("^_?ddwaf_.+")
         .blocklist_function("^ddwaf_init$") // This will eventually disappear from libddwaf
         .clang_arg(format!("-I{}", include_dir.to_str().unwrap()))
-        .default_visibility(bindgen::FieldVisibilityKind::PublicCrate)
+        .default_visibility(bindgen::FieldVisibilityKind::Public)
         .derive_default(true)
         .prepend_enum_name(false)
         .generate()
@@ -150,11 +157,6 @@ fn main() {
     bindings
         .write_to_file(bindings_out_path)
         .expect("Failed to write bindings.rs");
-
-    println!(
-        "cargo:rerun-if-changed={}",
-        include_dir.join("ddwaf.h").to_str().unwrap()
-    );
 }
 
 /// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.

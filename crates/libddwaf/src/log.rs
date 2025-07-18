@@ -3,7 +3,7 @@
 use std::ffi::CStr;
 use std::{error, fmt, slice};
 
-type LogCallback = Box<dyn Fn(LogLevel, &'static CStr, &'static CStr, u32, &[u8])>;
+type LogCallback = Box<dyn Fn(Level, &'static CStr, &'static CStr, u32, &[u8])>;
 
 static mut LOG_CB: Option<LogCallback> = None;
 
@@ -14,11 +14,11 @@ static mut LOG_CB: Option<LogCallback> = None;
 /// This function is unsafe because it writes to a static variable without synchronization.
 /// It should only be used during startup.
 pub unsafe fn set_log_cb(
-    cb: impl Fn(LogLevel, &'static CStr, &'static CStr, u32, &[u8]) + 'static,
-    min_level: LogLevel,
+    cb: impl Fn(Level, &'static CStr, &'static CStr, u32, &[u8]) + 'static,
+    min_level: Level,
 ) {
     LOG_CB = Some(Box::new(cb));
-    crate::bindings::ddwaf_set_log_cb(Some(bridge_log_cb), min_level.as_raw());
+    libddwaf_sys::ddwaf_set_log_cb(Some(bridge_log_cb), min_level.as_raw());
 }
 
 /// Resets the log callback function (to the default of "none").
@@ -28,14 +28,14 @@ pub unsafe fn set_log_cb(
 /// This function is unsafe because it writes to a static variable without synchronization.
 /// It should only be used during startup.
 pub unsafe fn reset_log_cb() {
-    crate::bindings::ddwaf_set_log_cb(None, LogLevel::Off.as_raw());
+    libddwaf_sys::ddwaf_set_log_cb(None, Level::Off.as_raw());
     LOG_CB = None;
 }
 
 /// Logging levels supported by the WAF.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum LogLevel {
+pub enum Level {
     /// Extremely detailed logging.
     Trace,
     /// Detailed logging.
@@ -49,19 +49,19 @@ pub enum LogLevel {
     /// Do not log anything.
     Off,
 }
-impl LogLevel {
-    const fn as_raw(self) -> crate::bindings::DDWAF_LOG_LEVEL {
+impl Level {
+    const fn as_raw(self) -> libddwaf_sys::DDWAF_LOG_LEVEL {
         match self {
-            Self::Trace => crate::bindings::DDWAF_LOG_TRACE,
-            Self::Debug => crate::bindings::DDWAF_LOG_DEBUG,
-            Self::Info => crate::bindings::DDWAF_LOG_INFO,
-            Self::Warn => crate::bindings::DDWAF_LOG_WARN,
-            Self::Error => crate::bindings::DDWAF_LOG_ERROR,
-            Self::Off => crate::bindings::DDWAF_LOG_OFF,
+            Self::Trace => libddwaf_sys::DDWAF_LOG_TRACE,
+            Self::Debug => libddwaf_sys::DDWAF_LOG_DEBUG,
+            Self::Info => libddwaf_sys::DDWAF_LOG_INFO,
+            Self::Warn => libddwaf_sys::DDWAF_LOG_WARN,
+            Self::Error => libddwaf_sys::DDWAF_LOG_ERROR,
+            Self::Off => libddwaf_sys::DDWAF_LOG_OFF,
         }
     }
 }
-impl fmt::Display for LogLevel {
+impl fmt::Display for Level {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Trace => write!(f, "TRACE"),
@@ -73,17 +73,17 @@ impl fmt::Display for LogLevel {
         }
     }
 }
-impl TryFrom<crate::bindings::DDWAF_LOG_LEVEL> for LogLevel {
+impl TryFrom<libddwaf_sys::DDWAF_LOG_LEVEL> for Level {
     type Error = UnknownLogLevelError;
 
-    fn try_from(value: crate::bindings::DDWAF_LOG_LEVEL) -> Result<Self, UnknownLogLevelError> {
+    fn try_from(value: libddwaf_sys::DDWAF_LOG_LEVEL) -> Result<Self, UnknownLogLevelError> {
         match value {
-            crate::bindings::DDWAF_LOG_TRACE => Ok(LogLevel::Trace),
-            crate::bindings::DDWAF_LOG_DEBUG => Ok(LogLevel::Debug),
-            crate::bindings::DDWAF_LOG_INFO => Ok(LogLevel::Info),
-            crate::bindings::DDWAF_LOG_WARN => Ok(LogLevel::Warn),
-            crate::bindings::DDWAF_LOG_ERROR => Ok(LogLevel::Error),
-            crate::bindings::DDWAF_LOG_OFF => Ok(LogLevel::Off),
+            libddwaf_sys::DDWAF_LOG_TRACE => Ok(Level::Trace),
+            libddwaf_sys::DDWAF_LOG_DEBUG => Ok(Level::Debug),
+            libddwaf_sys::DDWAF_LOG_INFO => Ok(Level::Info),
+            libddwaf_sys::DDWAF_LOG_WARN => Ok(Level::Warn),
+            libddwaf_sys::DDWAF_LOG_ERROR => Ok(Level::Error),
+            libddwaf_sys::DDWAF_LOG_OFF => Ok(Level::Off),
             unknown => Err(UnknownLogLevelError { raw: unknown }),
         }
     }
@@ -92,7 +92,7 @@ impl TryFrom<crate::bindings::DDWAF_LOG_LEVEL> for LogLevel {
 /// An error that is produced when encountering an unknown log level value.
 #[derive(Debug)]
 pub struct UnknownLogLevelError {
-    raw: crate::bindings::DDWAF_LOG_LEVEL,
+    raw: libddwaf_sys::DDWAF_LOG_LEVEL,
 }
 impl fmt::Display for UnknownLogLevelError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -103,8 +103,8 @@ impl error::Error for UnknownLogLevelError {}
 
 /// Wraps the log callback function (stored in [`LOG_CB`]) to convert the raw pointers provided by the C/C++ library into
 /// somewhat easier to consume types.
-extern "C" fn bridge_log_cb(
-    level: crate::bindings::DDWAF_LOG_LEVEL,
+extern "C-unwind" fn bridge_log_cb(
+    level: libddwaf_sys::DDWAF_LOG_LEVEL,
     file: *const std::os::raw::c_char,
     function: *const std::os::raw::c_char,
     line: u32,
@@ -119,7 +119,7 @@ extern "C" fn bridge_log_cb(
             let message =
                 slice::from_raw_parts(message.cast(), message_len.try_into().unwrap_or(usize::MAX));
             cb(
-                LogLevel::try_from(level).unwrap_or(LogLevel::Error),
+                Level::try_from(level).unwrap_or(Level::Error),
                 file,
                 function,
                 line,

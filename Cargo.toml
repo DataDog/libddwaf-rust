@@ -1,34 +1,13 @@
-[package]
-name = "libddwaf"
-description = "Rust bindings to DataDog/libddwaf"
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+default-members = ["crates/*"]
+
+[workspace.package]
 authors = ["DataDog, Inc. <support@datadoghq.com>"]
-version = "1.25.1"
 edition = "2021"
-categories = ["api-bindings", "security"]
-keywords = ["datadog", "security", "waf", "rasp"]
 license = "Apache-2.0"
 repository = "https://github.com/DataDog/libddwaf-rust"
 
-[dependencies]
-libc = "0.2"
-serde = { version = "1.0", optional = true }
-
-[build-dependencies]
-bindgen = "0.72"
-flate2 = "1.1"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "http2", "rustls-tls-native-roots-no-provider"] }
-tar = "0.4"
-# Following is to ensure FIPS compliance is possible.
-hyper-rustls = { version = "*", default-features = false, features = ["aws-lc-rs"] }
-rustls = { version = "*", default-features = false, features= ["aws-lc-rs"] }
-
-[dev-dependencies]
-serde_json = "1.0"
-
-[features]
-default = ["serde"]
-fips = ["hyper-rustls/fips", "rustls/fips"]
-serde = ["dep:serde"]
-
-[lints.rust]
+[workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage, coverage_nightly)'] }

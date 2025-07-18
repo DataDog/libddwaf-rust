@@ -4,7 +4,7 @@ use std::ptr::null_mut;
 /// The configuration for a new [Builder](crate::Builder).
 #[derive(Clone)]
 pub struct Config {
-    pub(crate) raw: crate::bindings::ddwaf_config,
+    pub(crate) raw: libddwaf_sys::ddwaf_config,
     _obfuscator: Obfuscator, // For keeping the memory alive
 }
 impl Config {
@@ -12,7 +12,7 @@ impl Config {
     #[must_use]
     pub fn new(limits: Limits, obfuscator: Obfuscator) -> Self {
         Self {
-            raw: crate::bindings::ddwaf_config {
+            raw: libddwaf_sys::ddwaf_config {
                 limits,
                 obfuscator: obfuscator.raw,
                 free_fn: None,
@@ -28,7 +28,7 @@ impl Default for Config {
 }
 
 /// The limits attached to a [Config].
-pub type Limits = crate::bindings::_ddwaf_config__ddwaf_config_limits;
+pub type Limits = libddwaf_sys::_ddwaf_config__ddwaf_config_limits;
 
 /// Obfuscation configuration for the WAF.
 ///
@@ -37,7 +37,7 @@ pub type Limits = crate::bindings::_ddwaf_config__ddwaf_config_limits;
 /// outputs.
 #[repr(transparent)]
 pub struct Obfuscator {
-    raw: crate::bindings::_ddwaf_config__ddwaf_config_obfuscator,
+    raw: libddwaf_sys::_ddwaf_config__ddwaf_config_obfuscator,
 }
 impl Obfuscator {
     /// Creates a new [Obfuscator] with the provided key and value regular
@@ -57,7 +57,7 @@ impl Obfuscator {
         });
         Self {
             #[allow(clippy::used_underscore_items)]
-            raw: crate::bindings::_ddwaf_config__ddwaf_config_obfuscator {
+            raw: libddwaf_sys::_ddwaf_config__ddwaf_config_obfuscator {
                 key_regex,
                 value_regex,
             },

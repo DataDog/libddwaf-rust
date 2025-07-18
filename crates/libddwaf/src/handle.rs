@@ -8,21 +8,21 @@ use crate::Context;
 /// that use the underlying instance's configuration.
 #[repr(transparent)]
 pub struct Handle {
-    pub(crate) raw: crate::bindings::ddwaf_handle,
+    pub(crate) raw: libddwaf_sys::ddwaf_handle,
 }
 impl Handle {
     /// Creates a new [Context] from this instance.
     #[must_use]
     pub fn new_context(&self) -> Context {
         Context {
-            raw: unsafe { crate::bindings::ddwaf_context_init(self.raw) },
+            raw: unsafe { libddwaf_sys::ddwaf_context_init(self.raw) },
             keepalive: Vec::new(),
         }
     }
 
     /// Returns the list of actions that may be produced by this instance's ruleset.
     pub fn known_actions(&self) -> Vec<&CStr> {
-        self.call_cstr_array_fn(crate::bindings::ddwaf_known_actions)
+        self.call_cstr_array_fn(libddwaf_sys::ddwaf_known_actions)
     }
 
     /// Returns the list of addresses that are used by this instance's ruleset.
@@ -30,13 +30,13 @@ impl Handle {
     /// Sending data for addresses not in this list to [`Context::run`] should be avoided as this
     /// data will never result in any side-effects.
     pub fn known_addresses(&self) -> Vec<&CStr> {
-        self.call_cstr_array_fn(crate::bindings::ddwaf_known_addresses)
+        self.call_cstr_array_fn(libddwaf_sys::ddwaf_known_addresses)
     }
 
     fn call_cstr_array_fn(
         &self,
-        f: unsafe extern "C" fn(
-            crate::bindings::ddwaf_handle,
+        f: unsafe extern "C-unwind" fn(
+            libddwaf_sys::ddwaf_handle,
             *mut u32,
         ) -> *const *const std::os::raw::c_char,
     ) -> Vec<&CStr> {
@@ -52,7 +52,7 @@ impl Handle {
 }
 impl Drop for Handle {
     fn drop(&mut self) {
-        unsafe { crate::bindings::ddwaf_destroy(self.raw) }
+        unsafe { libddwaf_sys::ddwaf_destroy(self.raw) }
     }
 }
 // SAFETY: ddwaf instances are effectively immutable

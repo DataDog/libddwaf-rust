@@ -80,7 +80,6 @@ use std::ffi::CStr;
 #[cfg(feature = "serde")]
 pub mod serde;
 
-mod bindings;
 pub mod log;
 pub mod object;
 mod private;
@@ -100,7 +99,7 @@ forward!(builder, config, context, handle);
 /// Returns the version of the underlying `libddwaf` library.
 #[must_use]
 pub fn get_version() -> &'static CStr {
-    unsafe { CStr::from_ptr(bindings::ddwaf_get_version()) }
+    unsafe { CStr::from_ptr(libddwaf_sys::ddwaf_get_version()) }
 }
 
 #[cfg(test)]

@@ -5,8 +5,6 @@ use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::ptr::null_mut;
 use std::{cmp, fmt};
 
-use crate::bindings;
-
 mod iter;
 #[doc(inline)]
 pub use iter::*;
@@ -36,34 +34,34 @@ pub enum WafObjectType {
     Null,
 }
 impl WafObjectType {
-    /// Returns the raw [`bindings::DDWAF_OBJ_TYPE`] value corresponding to this [`WafObjectType`].
-    const fn as_raw(self) -> bindings::DDWAF_OBJ_TYPE {
+    /// Returns the raw [`libddwaf_sys::DDWAF_OBJ_TYPE`] value corresponding to this [`WafObjectType`].
+    const fn as_raw(self) -> libddwaf_sys::DDWAF_OBJ_TYPE {
         match self {
-            WafObjectType::Invalid => bindings::DDWAF_OBJ_INVALID,
-            WafObjectType::Signed => bindings::DDWAF_OBJ_SIGNED,
-            WafObjectType::Unsigned => bindings::DDWAF_OBJ_UNSIGNED,
-            WafObjectType::String => bindings::DDWAF_OBJ_STRING,
-            WafObjectType::Array => bindings::DDWAF_OBJ_ARRAY,
-            WafObjectType::Map => bindings::DDWAF_OBJ_MAP,
-            WafObjectType::Bool => bindings::DDWAF_OBJ_BOOL,
-            WafObjectType::Float => bindings::DDWAF_OBJ_FLOAT,
-            WafObjectType::Null => bindings::DDWAF_OBJ_NULL,
+            WafObjectType::Invalid => libddwaf_sys::DDWAF_OBJ_INVALID,
+            WafObjectType::Signed => libddwaf_sys::DDWAF_OBJ_SIGNED,
+            WafObjectType::Unsigned => libddwaf_sys::DDWAF_OBJ_UNSIGNED,
+            WafObjectType::String => libddwaf_sys::DDWAF_OBJ_STRING,
+            WafObjectType::Array => libddwaf_sys::DDWAF_OBJ_ARRAY,
+            WafObjectType::Map => libddwaf_sys::DDWAF_OBJ_MAP,
+            WafObjectType::Bool => libddwaf_sys::DDWAF_OBJ_BOOL,
+            WafObjectType::Float => libddwaf_sys::DDWAF_OBJ_FLOAT,
+            WafObjectType::Null => libddwaf_sys::DDWAF_OBJ_NULL,
         }
     }
 }
-impl TryFrom<bindings::DDWAF_OBJ_TYPE> for WafObjectType {
+impl TryFrom<libddwaf_sys::DDWAF_OBJ_TYPE> for WafObjectType {
     type Error = UnknownObjectTypeError;
-    fn try_from(value: bindings::DDWAF_OBJ_TYPE) -> Result<Self, UnknownObjectTypeError> {
+    fn try_from(value: libddwaf_sys::DDWAF_OBJ_TYPE) -> Result<Self, UnknownObjectTypeError> {
         match value {
-            bindings::DDWAF_OBJ_INVALID => Ok(WafObjectType::Invalid),
-            bindings::DDWAF_OBJ_SIGNED => Ok(WafObjectType::Signed),
-            bindings::DDWAF_OBJ_UNSIGNED => Ok(WafObjectType::Unsigned),
-            bindings::DDWAF_OBJ_STRING => Ok(WafObjectType::String),
-            bindings::DDWAF_OBJ_ARRAY => Ok(WafObjectType::Array),
-            bindings::DDWAF_OBJ_MAP => Ok(WafObjectType::Map),
-            bindings::DDWAF_OBJ_BOOL => Ok(WafObjectType::Bool),
-            bindings::DDWAF_OBJ_FLOAT => Ok(WafObjectType::Float),
-            bindings::DDWAF_OBJ_NULL => Ok(WafObjectType::Null),
+            libddwaf_sys::DDWAF_OBJ_INVALID => Ok(WafObjectType::Invalid),
+            libddwaf_sys::DDWAF_OBJ_SIGNED => Ok(WafObjectType::Signed),
+            libddwaf_sys::DDWAF_OBJ_UNSIGNED => Ok(WafObjectType::Unsigned),
+            libddwaf_sys::DDWAF_OBJ_STRING => Ok(WafObjectType::String),
+            libddwaf_sys::DDWAF_OBJ_ARRAY => Ok(WafObjectType::Array),
+            libddwaf_sys::DDWAF_OBJ_MAP => Ok(WafObjectType::Map),
+            libddwaf_sys::DDWAF_OBJ_BOOL => Ok(WafObjectType::Bool),
+            libddwaf_sys::DDWAF_OBJ_FLOAT => Ok(WafObjectType::Float),
+            libddwaf_sys::DDWAF_OBJ_NULL => Ok(WafObjectType::Null),
             unknown => Err(UnknownObjectTypeError(unknown)),
         }
     }
@@ -71,7 +69,7 @@ impl TryFrom<bindings::DDWAF_OBJ_TYPE> for WafObjectType {
 
 /// The error that is returned when a [`WafObject`] does not have a known, valid [`WafObjectType`].
 #[derive(Copy, Clone, Debug)]
-pub struct UnknownObjectTypeError(bindings::DDWAF_OBJ_TYPE);
+pub struct UnknownObjectTypeError(libddwaf_sys::DDWAF_OBJ_TYPE);
 impl std::error::Error for UnknownObjectTypeError {}
 impl std::fmt::Display for UnknownObjectTypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -99,23 +97,23 @@ impl std::fmt::Display for ObjectTypeError {
 /// This trait allow obtaining direct mutable access to the underlying memory
 /// backing a [`WafObject`] or [`TypedWafObject`] value.
 #[doc(hidden)]
-pub trait AsRawMutObject: crate::private::Sealed + AsRef<bindings::ddwaf_object> {
-    /// Obtains a mutable reference to the underlying raw `ddwaf_object`]`.
+pub trait AsRawMutObject: crate::private::Sealed + AsRef<libddwaf_sys::ddwaf_object> {
+    /// Obtains a mutable reference to the underlying raw [`libddwaf_sys::ddwaf_object`].
     ///
     /// # Safety
     /// The caller must ensure that:
-    /// - it does not change the [`bindings::ddwaf_object::type_`] field,
-    /// - it does not change the pointers to values that don't outlive the [`bindings::ddwaf_object`]
+    /// - it does not change the [`libddwaf_sys::ddwaf_object::type_`] field,
+    /// - it does not change the pointers to values that don't outlive the [`libddwaf_sys::ddwaf_object`]
     ///   itself, or whose memory cannot be recclaimed byt the destructor in the same way as the
     ///   current value,
     /// - it does not change the lengths in such a way that the object is no longer valid.
     ///
     /// Additionally, the caller would incur a memory leak if it dropped the value through the
-    /// returned reference (e.g, by calling [`std::mem::replace`]), since [`bindings::ddwaf_object`] is
+    /// returned reference (e.g, by calling [`std::mem::replace`]), since [`libddwaf_sys::ddwaf_object`] is
     /// not [`Drop`] (see swapped destructors in
     /// [this playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=aeea4aba8f960bf0c63f6185f016a94d).
     #[doc(hidden)]
-    unsafe fn as_raw_mut(&mut self) -> &mut bindings::ddwaf_object;
+    unsafe fn as_raw_mut(&mut self) -> &mut libddwaf_sys::ddwaf_object;
 }
 
 /// This trait is implemented by type-safe interfaces to the [`WafObject`], with
@@ -132,7 +130,7 @@ pub trait TypedWafObject: AsRawMutObject {
 #[derive(Default)]
 #[repr(transparent)]
 pub struct WafObject {
-    raw: bindings::ddwaf_object,
+    raw: libddwaf_sys::ddwaf_object,
 }
 impl WafObject {
     /// Returns the [`WafObjectType`] of the underlying value.
@@ -223,13 +221,13 @@ impl WafObject {
         self.as_type::<WafString>().and_then(|x| x.as_str().ok())
     }
 }
-impl AsRef<bindings::ddwaf_object> for WafObject {
-    fn as_ref(&self) -> &bindings::ddwaf_object {
+impl AsRef<libddwaf_sys::ddwaf_object> for WafObject {
+    fn as_ref(&self) -> &libddwaf_sys::ddwaf_object {
         &self.raw
     }
 }
 impl AsRawMutObject for WafObject {
-    unsafe fn as_raw_mut(&mut self) -> &mut bindings::ddwaf_object {
+    unsafe fn as_raw_mut(&mut self) -> &mut libddwaf_sys::ddwaf_object {
         &mut self.raw
     }
 }
@@ -331,7 +329,7 @@ impl<T: TypedWafObject> From<T> for WafObject {
         res
     }
 }
-impl<T: AsRef<bindings::ddwaf_object>> cmp::PartialEq<T> for WafObject {
+impl<T: AsRef<libddwaf_sys::ddwaf_object>> cmp::PartialEq<T> for WafObject {
     fn eq(&self, other: &T) -> bool {
         self.raw == *other.as_ref()
     }
@@ -369,7 +367,7 @@ impl<T: AsRawMutObject> DerefMut for WafOwned<T> {
 }
 impl<T: AsRawMutObject> Drop for WafOwned<T> {
     fn drop(&mut self) {
-        unsafe { bindings::ddwaf_object_free(self.inner.as_raw_mut()) };
+        unsafe { libddwaf_sys::ddwaf_object_free(self.inner.as_raw_mut()) };
     }
 }
 
@@ -394,7 +392,7 @@ macro_rules! typed_object {
         #[doc = concat!("The WAF object representation of a value of type [", stringify!($type), "]")]
         #[repr(transparent)]
         pub struct $name {
-            raw: $crate::bindings::ddwaf_object,
+            raw: libddwaf_sys::ddwaf_object,
         }
         impl $name {
             #[doc = concat!("Returns true if this [", stringify!($name), "] is indeed [", stringify!($type), "].")]
@@ -406,26 +404,26 @@ macro_rules! typed_object {
             /// Returns a reference to this value as a [`WafObject`].
             #[must_use]
             pub fn as_object(&self) -> &WafObject{
-                let obj: &bindings::ddwaf_object = self.as_ref();
+                let obj: &libddwaf_sys::ddwaf_object = self.as_ref();
                 obj.as_object_ref()
             }
             $(
             $($impl)*)?
         }
-        impl AsRef<$crate::bindings::ddwaf_object> for $name {
-            fn as_ref(&self) -> &$crate::bindings::ddwaf_object {
+        impl AsRef<libddwaf_sys::ddwaf_object> for $name {
+            fn as_ref(&self) -> &libddwaf_sys::ddwaf_object {
                 &self.raw
             }
         }
         impl AsRawMutObject for $name {
-            unsafe fn as_raw_mut(&mut self) -> &mut $crate::bindings::ddwaf_object {
+            unsafe fn as_raw_mut(&mut self) -> &mut libddwaf_sys::ddwaf_object {
                 &mut self.raw
             }
         }
         impl Default for $name {
             fn default() -> Self {
                 Self {
-                    raw: $crate::bindings::ddwaf_object {
+                    raw: libddwaf_sys::ddwaf_object {
                         type_: $type.as_raw(),
                         ..Default::default()
                     },
@@ -446,7 +444,7 @@ macro_rules! typed_object {
                 Ok(res)
             }
         }
-        impl<T: AsRef<bindings::ddwaf_object>> cmp::PartialEq<T> for $name {
+        impl<T: AsRef<libddwaf_sys::ddwaf_object>> cmp::PartialEq<T> for $name {
             fn eq(&self, other: &T) -> bool {
                 self.raw == *other.as_ref()
             }
@@ -464,10 +462,10 @@ typed_object!(WafObjectType::Signed => WafSigned {
     #[must_use]
     pub const fn new(val: i64) -> Self {
         Self {
-            raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_SIGNED,
+            raw: libddwaf_sys::ddwaf_object {
+                type_: libddwaf_sys::DDWAF_OBJ_SIGNED,
                 #[allow(clippy::used_underscore_items)]
-                __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { intValue: val },
+                __bindgen_anon_1: libddwaf_sys::_ddwaf_object__bindgen_ty_1 { intValue: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
                 parameterNameLength: 0,
@@ -486,10 +484,10 @@ typed_object!(WafObjectType::Unsigned => WafUnsigned {
     #[must_use]
     pub const fn new (val: u64) -> Self {
         Self {
-            raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_UNSIGNED,
+            raw: libddwaf_sys::ddwaf_object {
+                type_: libddwaf_sys::DDWAF_OBJ_UNSIGNED,
                 #[allow(clippy::used_underscore_items)]
-                __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { uintValue: val },
+                __bindgen_anon_1: libddwaf_sys::_ddwaf_object__bindgen_ty_1 { uintValue: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
                 parameterNameLength: 0,
@@ -514,10 +512,10 @@ typed_object!(WafObjectType::String => WafString {
             Box::into_raw(b).cast()
         };
         Self {
-            raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_STRING,
+            raw: libddwaf_sys::ddwaf_object {
+                type_: libddwaf_sys::DDWAF_OBJ_STRING,
                 #[allow(clippy::used_underscore_items)]
-                __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 {
+                __bindgen_anon_1: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     stringValue: ptr,
                 },
                 nbEntries: val.len() as u64,
@@ -545,7 +543,7 @@ typed_object!(WafObjectType::String => WafString {
     /// Returns a slice of the bytes from this [WafString].
     #[must_use]
     pub fn bytes(&self) -> &[u8] {
-        debug_assert_eq!(self.raw.type_, bindings::DDWAF_OBJ_STRING);
+        debug_assert_eq!(self.raw.type_, libddwaf_sys::DDWAF_OBJ_STRING);
         let len = self.len();
         if len == 0 {
             return &[];
@@ -577,14 +575,14 @@ typed_object!(WafObjectType::Array => WafArray {
     #[must_use]
     pub fn new(nb_entries: u64) -> Self {
         let size = usize::try_from(nb_entries).expect("size is too large for this platform");
-        let layout = Layout::array::<bindings::ddwaf_object>(size).unwrap();
+        let layout = Layout::array::<libddwaf_sys::ddwaf_object>(size).unwrap();
         let array = unsafe { no_fail_alloc(layout).cast() };
         unsafe { std::ptr::write_bytes(array, 0, size)};
         Self {
-            raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_ARRAY,
+            raw: libddwaf_sys::ddwaf_object {
+                type_: libddwaf_sys::DDWAF_OBJ_ARRAY,
                 #[allow(clippy::used_underscore_items)]
-                __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { array },
+                __bindgen_anon_1: libddwaf_sys::_ddwaf_object__bindgen_ty_1 { array },
                 nbEntries: nb_entries,
                 ..Default::default()
             }
@@ -629,14 +627,14 @@ typed_object!(WafObjectType::Map => WafMap {
     #[must_use]
     pub fn new(nb_entries: u64) -> Self {
         let size = usize::try_from(nb_entries).expect("size is too large for this platform");
-        let layout = Layout::array::<bindings::ddwaf_object>(size).unwrap();
+        let layout = Layout::array::<libddwaf_sys::ddwaf_object>(size).unwrap();
         let array = unsafe { no_fail_alloc(layout).cast() };
         unsafe { std::ptr::write_bytes(array, 0, size)};
         Self {
-            raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_MAP,
+            raw: libddwaf_sys::ddwaf_object {
+                type_: libddwaf_sys::DDWAF_OBJ_MAP,
                 #[allow(clippy::used_underscore_items)]
-                __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 {  array },
+                __bindgen_anon_1: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {  array },
                 nbEntries: nb_entries,
                 ..Default::default()
             }
@@ -712,10 +710,10 @@ typed_object!(WafObjectType::Bool => WafBool {
     #[must_use]
     pub const fn new(val: bool) -> Self {
         Self {
-            raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_BOOL,
+            raw: libddwaf_sys::ddwaf_object {
+                type_: libddwaf_sys::DDWAF_OBJ_BOOL,
                 #[allow(clippy::used_underscore_items)]
-                __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { boolean: val },
+                __bindgen_anon_1: libddwaf_sys::_ddwaf_object__bindgen_ty_1 { boolean: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
                 parameterNameLength: 0,
@@ -734,10 +732,10 @@ typed_object!(WafObjectType::Float => WafFloat {
     #[must_use]
     pub const fn new(val: f64) -> Self {
         Self {
-            raw: bindings::ddwaf_object {
-                type_: bindings::DDWAF_OBJ_FLOAT,
+            raw: libddwaf_sys::ddwaf_object {
+                type_: libddwaf_sys::DDWAF_OBJ_FLOAT,
                 #[allow(clippy::used_underscore_items)]
-                __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { f64_: val },
+                __bindgen_anon_1: libddwaf_sys::_ddwaf_object__bindgen_ty_1 { f64_: val },
                 nbEntries: 0,
                 parameterName: null_mut(),
                 parameterNameLength: 0,
@@ -755,10 +753,10 @@ typed_object!(WafObjectType::Null => WafNull {
     /// Creates a new [WafNull].
     #[must_use]
     pub const fn new() -> Self {
-        Self { raw: bindings::ddwaf_object {
-            type_: bindings::DDWAF_OBJ_NULL,
+        Self { raw: libddwaf_sys::ddwaf_object {
+            type_: libddwaf_sys::DDWAF_OBJ_NULL,
             #[allow(clippy::used_underscore_items)]
-            __bindgen_anon_1: bindings::_ddwaf_object__bindgen_ty_1 { uintValue: 0},
+            __bindgen_anon_1: libddwaf_sys::_ddwaf_object__bindgen_ty_1 { uintValue: 0},
             nbEntries: 0,
             parameterName: null_mut(),
             parameterNameLength: 0,
@@ -869,7 +867,7 @@ impl<T: Into<WafObject>, const N: usize> From<[T; N]> for WafArray {
 impl Index<usize> for WafArray {
     type Output = WafObject;
     fn index(&self, index: usize) -> &Self::Output {
-        let obj: &bindings::ddwaf_object = self.as_ref();
+        let obj: &libddwaf_sys::ddwaf_object = self.as_ref();
         assert!(
             // The object might be larger than [usize::MAX], but we ignore this for simplicity's sake.
             index < usize::try_from(obj.nbEntries).unwrap_or(usize::MAX),
@@ -883,7 +881,7 @@ impl Index<usize> for WafArray {
 }
 impl IndexMut<usize> for WafArray {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let obj: &bindings::ddwaf_object = self.as_ref();
+        let obj: &libddwaf_sys::ddwaf_object = self.as_ref();
         assert!(
             // The object might be larger than [usize::MAX], but we ignore this for simplicity's sake.
             index < usize::try_from(obj.nbEntries).unwrap_or(usize::MAX),
@@ -937,7 +935,7 @@ impl Drop for WafMap {
 impl Index<usize> for WafMap {
     type Output = Keyed<WafObject>;
     fn index(&self, index: usize) -> &Self::Output {
-        let obj: &bindings::ddwaf_object = self.as_ref();
+        let obj: &libddwaf_sys::ddwaf_object = self.as_ref();
         assert!(
             // The object might be larger than [usize::MAX], but we ignore this for simplicity's sake.
             index < usize::try_from(obj.nbEntries).unwrap_or(usize::MAX),
@@ -951,7 +949,7 @@ impl Index<usize> for WafMap {
 }
 impl IndexMut<usize> for WafMap {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let obj: &bindings::ddwaf_object = self.as_ref();
+        let obj: &libddwaf_sys::ddwaf_object = self.as_ref();
         assert!(
             // The object might be larger than [usize::MAX], but we ignore this for simplicity's sake.
             index < usize::try_from(obj.nbEntries).unwrap_or(usize::MAX),
@@ -1109,13 +1107,13 @@ impl Keyed<WafMap> {
     }
 }
 impl<T: AsRawMutObject> AsRawMutObject for Keyed<T> {
-    unsafe fn as_raw_mut(&mut self) -> &mut bindings::ddwaf_object {
+    unsafe fn as_raw_mut(&mut self) -> &mut libddwaf_sys::ddwaf_object {
         self.value.as_raw_mut()
     }
 }
 impl<T: AsRawMutObject> crate::private::Sealed for Keyed<T> {}
-impl<T: AsRawMutObject> AsRef<bindings::ddwaf_object> for Keyed<T> {
-    fn as_ref(&self) -> &bindings::ddwaf_object {
+impl<T: AsRawMutObject> AsRef<libddwaf_sys::ddwaf_object> for Keyed<T> {
+    fn as_ref(&self) -> &libddwaf_sys::ddwaf_object {
         self.value.as_ref()
     }
 }
@@ -1177,56 +1175,82 @@ impl<T: TypedWafObject> From<Keyed<T>> for Keyed<WafObject> {
     }
 }
 
-impl crate::bindings::ddwaf_object {
-    /// Converts a naked reference to a [`bindings::ddwaf_object`] into a reference to one of the
+trait UncheckedAsRef: crate::private::Sealed {
+    /// Converts a naked reference to a [`libddwaf_sys::ddwaf_object`] into a reference to one of the
     /// user-friendlier types.
     ///
     /// # Safety
-    /// The type `T` must be able to represent this [`bindings::ddwaf_object`]'s type (per its
-    /// associated [`bindings::DDWAF_OBJ_TYPE`] value).
-    pub(crate) unsafe fn unchecked_as_ref<
-        T: AsRef<bindings::ddwaf_object> + crate::private::Sealed,
-    >(
+    /// The type `T` must be able to represent this [`libddwaf_sys::ddwaf_object`]'s type (per its
+    /// associated [`libddwaf_sys::DDWAF_OBJ_TYPE`] value).
+    unsafe fn unchecked_as_ref<T: AsRef<libddwaf_sys::ddwaf_object> + crate::private::Sealed>(
+        &self,
+    ) -> &T;
+
+    /// Converts a naked mutable reference to a `ddwaf_object` into a mutable reference to one of the
+    ///
+    /// # Safety
+    /// - The type `T` must be able to represent this [`libddwaf_sys::ddwaf_object`]'s type (per its
+    ///   associated [`libddwaf_sys::DDWAF_OBJ_TYPE`] value).
+    /// - The destructor of `T` must be compatible with the value of self.
+    unsafe fn unchecked_as_ref_mut<T: AsRef<libddwaf_sys::ddwaf_object> + crate::private::Sealed>(
+        &mut self,
+    ) -> &mut T;
+}
+impl crate::private::Sealed for libddwaf_sys::ddwaf_object {}
+impl UncheckedAsRef for libddwaf_sys::ddwaf_object {
+    unsafe fn unchecked_as_ref<T: AsRef<libddwaf_sys::ddwaf_object> + crate::private::Sealed>(
         &self,
     ) -> &T {
         &*(std::ptr::from_ref(self).cast())
     }
 
-    /// Converts a naked mutable reference to a `ddwaf_object` into a mutable reference to one of the
-    ///
-    /// # Safety
-    /// - The type `T` must be able to represent this [`bindings::ddwaf_object`]'s type (per its
-    ///   associated [`bindings::DDWAF_OBJ_TYPE`] value).
-    /// - The destructor of `T` must be compatible with the value of self.
-    pub(crate) unsafe fn unchecked_as_ref_mut<
-        T: AsRef<bindings::ddwaf_object> + crate::private::Sealed,
+    unsafe fn unchecked_as_ref_mut<
+        T: AsRef<libddwaf_sys::ddwaf_object> + crate::private::Sealed,
     >(
         &mut self,
     ) -> &mut T {
         &mut *(std::ptr::from_mut(self).cast())
     }
+}
+trait UncheckedAsWafObject: crate::private::Sealed {
+    /// Converts a naked reference to a [`libddwaf_sys::ddwaf_object`] into a reference to an [`WafObject`].
+    fn as_object_ref(&self) -> &WafObject;
 
-    /// Converts a naked reference to a [`bindings::ddwaf_object`] into a reference to an [`WafObject`].
-    pub(crate) fn as_object_ref(&self) -> &WafObject {
-        unsafe { self.unchecked_as_ref::<WafObject>() }
-    }
-
-    /// Converts a naked reference to a [`bindings::ddwaf_object`] into a reference to an opaque
+    /// Converts a naked reference to a [`libddwaf_sys::ddwaf_object`] into a reference to an opaque
     /// [`Keyed<WafObject>`].
-    pub(crate) fn as_keyed_object_ref(&self) -> &Keyed<WafObject> {
-        // SAFETY: Keyed<WafObject> is compatible with all valid [bindings::ddwaf_object] values,
-        // event if their key is not set.
-        unsafe { self.unchecked_as_ref::<Keyed<WafObject>>() }
-    }
+    fn as_keyed_object_ref(&self) -> &Keyed<WafObject>;
 
-    /// Converts a naked mutable reference to a [`bindings::ddwaf_object`] into a mutable reference to
+    /// Converts a naked mutable reference to a [`libddwaf_sys::ddwaf_object`] into a mutable reference to
     /// an opaque [`Keyed<WafObject>`].
     ///
     /// # Safety
     /// The caller must ensure that the destructor of [`Keyed<WafObject>`]
-    /// ([`bindings::ddwaf_object::drop_key`] and [`bindings::ddwaf_object::drop_object`]) can be called
+    /// ([`libddwaf_sys::ddwaf_object::drop_key`] and [`libddwaf_sys::ddwaf_object::drop_object`]) can be called
     /// on self.
-    pub(crate) unsafe fn as_keyed_object_mut(&mut self) -> &mut Keyed<WafObject> {
+    unsafe fn as_keyed_object_mut(&mut self) -> &mut Keyed<WafObject>;
+}
+impl<T: UncheckedAsRef> UncheckedAsWafObject for T {
+    /// Converts a naked reference to a [`libddwaf_sys::ddwaf_object`] into a reference to an [`WafObject`].
+    fn as_object_ref(&self) -> &WafObject {
+        unsafe { self.unchecked_as_ref::<WafObject>() }
+    }
+
+    /// Converts a naked reference to a [`libddwaf_sys::ddwaf_object`] into a reference to an opaque
+    /// [`Keyed<WafObject>`].
+    fn as_keyed_object_ref(&self) -> &Keyed<WafObject> {
+        // SAFETY: Keyed<WafObject> is compatible with all valid [libddwaf_sys::ddwaf_object] values,
+        // event if their key is not set.
+        unsafe { self.unchecked_as_ref::<Keyed<WafObject>>() }
+    }
+
+    /// Converts a naked mutable reference to a [`libddwaf_sys::ddwaf_object`] into a mutable reference to
+    /// an opaque [`Keyed<WafObject>`].
+    ///
+    /// # Safety
+    /// The caller must ensure that the destructor of [`Keyed<WafObject>`]
+    /// ([`libddwaf_sys::ddwaf_object::drop_key`] and [`libddwaf_sys::ddwaf_object::drop_object`]) can be called
+    /// on self.
+    unsafe fn as_keyed_object_mut(&mut self) -> &mut Keyed<WafObject> {
         self.unchecked_as_ref_mut::<Keyed<WafObject>>()
     }
 }
