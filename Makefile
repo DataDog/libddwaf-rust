@@ -31,5 +31,6 @@ format_check:
 Cargo.lock: Cargo.toml
 	cargo check
 
-LICENSE-3rdparty.yml: Cargo.toml Cargo.lock
-	cargo bundle-licenses --format=yaml --output=LICENSE-3rdparty.yml
+LICENSE-3rdparty.csv: Cargo.toml Cargo.lock
+	cargo install --locked dd-rust-license-tool
+	dd-rust-license-tool write

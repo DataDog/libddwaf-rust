@@ -3,7 +3,7 @@ use std::ptr::null_mut;
 use crate::object::{AsRawMutObject, WafArray, WafMap, WafOwned};
 use crate::{Config, Handle};
 
-/// A builder for [Handle]s.
+/// A builder for [`Handle`]s.
 ///
 /// This is used to maintain a live view over mutable configuration, and is best
 /// suited for cases where the Waf's configuration evolves regularly, such as
@@ -13,7 +13,7 @@ pub struct Builder {
     raw: libddwaf_sys::ddwaf_builder,
 }
 impl Builder {
-    /// Creates a new [Builder] instance using the provided [Config]. Returns [None] if the
+    /// Creates a new [`Builder`] instance using the provided [`Config`]. Returns [`None`] if the
     /// builder's initialization fails.
     #[must_use]
     pub fn new(config: &Config) -> Option<Self> {
@@ -73,7 +73,7 @@ impl Builder {
         }
     }
 
-    /// Returns the number of configuration paths currently loaded in this [Builder], optionally
+    /// Returns the number of configuration paths currently loaded in this [`Builder`], optionally
     /// filtered by a regular expression.
     ///
     /// # Panics
@@ -92,7 +92,7 @@ impl Builder {
         }
     }
 
-    /// Returns the configuration paths currently loaded in this [Builder], optionally filtered by
+    /// Returns the configuration paths currently loaded in this [`Builder`], optionally filtered by
     /// a regular expression.
     ///
     /// # Panics
@@ -113,9 +113,9 @@ impl Builder {
         res
     }
 
-    /// Builds a new [Handle] from the current configuration in this [Builder].
+    /// Builds a new [`Handle`] from the current configuration in this [`Builder`].
     ///
-    /// Returns [None] if the builder fails to create a new [Handle], meaning the current
+    /// Returns [`None`] if the builder fails to create a new [`Handle`], meaning the current
     /// configuration contains no active instructions (no rules nor processors are available).
     #[must_use]
     pub fn build(&mut self) -> Option<Handle> {

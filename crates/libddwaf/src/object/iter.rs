@@ -67,7 +67,7 @@ impl IntoIterator for Keyed<WafMap> {
     }
 }
 
-/// An iterator over an [`WafArray`][WafArray] or [`WafMap`][WafMap].
+/// An iterator over an [`WafArray`] or [`WafMap`].
 pub struct WafIter<T> {
     array: *mut T,
     len: usize,

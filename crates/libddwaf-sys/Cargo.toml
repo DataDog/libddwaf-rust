@@ -23,8 +23,9 @@ hyper-rustls = { version = "*", default-features = false, features = ["aws-lc-rs
 rustls = { version = "*", default-features = false, features= ["aws-lc-rs"] }
 
 [features]
-default = []
+default = ["static"]
 fips = ["hyper-rustls/fips", "rustls/fips"]
+static = []
 
 [lints]
 workspace = true

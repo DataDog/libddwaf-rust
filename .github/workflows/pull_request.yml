@@ -26,8 +26,8 @@ jobs:
                     ~/.rustup/downloads/
                     ~/.rustup/update-hashes/
                     target/
-                  key: ${{ runner.os }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-cargo-${{ github.ref_name }}-
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
             - name: Format check
               run: make format_check
             - name: Run Clippy
@@ -50,23 +50,30 @@ jobs:
                     ~/.rustup/downloads/
                     ~/.rustup/update-hashes/
                     target/
-                  key: ${{ runner.os }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-cargo-${{ github.ref_name }}-
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
             - name: Install tools
               run: cargo install cargo-bundle-licenses
-            - name: Generate LICENSE_3rdparty.yml
-              run: make LICENSE-3rdparty.yml
+            - name: Generate LICENSE_3rdparty.csv
+              run: make LICENSE-3rdparty.csv
             - name: Check for changes
               run: |-
-                git add LICENSE-3rdparty.yml
+                git add LICENSE-3rdparty.csv
                 git diff --exit-code
 
     tests:
-        name: Test
-        runs-on: ubuntu-latest
+        name: Test (${{ matrix.runs-on }})
+        strategy:
+            matrix:
+                runs-on:
+                    - ubuntu-latest
+                    - macos-latest
+                    - ubuntu-24.04-arm
+        runs-on: ${{ matrix.runs-on }}
         steps:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
             - name: Cache
               uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
               with:
@@ -78,8 +85,8 @@ jobs:
                     ~/.rustup/downloads/
                     ~/.rustup/update-hashes/
                     target/
-                  key: ${{ runner.os }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-cargo-${{ github.ref_name }}-
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
             - name: Run Tests
               run: make test
 
@@ -100,8 +107,8 @@ jobs:
                     ~/.rustup/downloads/
                     ~/.rustup/update-hashes/
                     target/
-                  key: ${{ runner.os }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-cargo-${{ github.ref_name }}-
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
             - name: Install tools
               run: cargo +nightly install cargo-llvm-cov
             - name: Test Coverage
@@ -130,8 +137,8 @@ jobs:
                     ~/.rustup/downloads/
                     ~/.rustup/update-hashes/
                     target/
-                  key: ${{ runner.os }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-cargo-${{ github.ref_name }}-
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
             - name: Generate Documentation
               run: cargo doc --all-features
             - name: Upload Documentation

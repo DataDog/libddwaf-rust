@@ -1,14 +1,14 @@
 use std::ffi::{CStr, CString};
 use std::ptr::null_mut;
 
-/// The configuration for a new [Builder](crate::Builder).
+/// The configuration for a new [`Builder`](crate::Builder).
 #[derive(Clone)]
 pub struct Config {
     pub(crate) raw: libddwaf_sys::ddwaf_config,
     _obfuscator: Obfuscator, // For keeping the memory alive
 }
 impl Config {
-    /// Creates a new [Config] with the provided [Limits] and [Obfuscator].
+    /// Creates a new [`Config`] with the provided [`Limits`] and [`Obfuscator`].
     #[must_use]
     pub fn new(limits: Limits, obfuscator: Obfuscator) -> Self {
         Self {
@@ -27,7 +27,7 @@ impl Default for Config {
     }
 }
 
-/// The limits attached to a [Config].
+/// The limits attached to a [`Config`].
 pub type Limits = libddwaf_sys::_ddwaf_config__ddwaf_config_limits;
 
 /// Obfuscation configuration for the WAF.
@@ -40,7 +40,7 @@ pub struct Obfuscator {
     raw: libddwaf_sys::_ddwaf_config__ddwaf_config_obfuscator,
 }
 impl Obfuscator {
-    /// Creates a new [Obfuscator] with the provided key and value regular
+    /// Creates a new [`Obfuscator`] with the provided key and value regular
     /// expressions.
     ///
     /// # Panics
