@@ -11,7 +11,7 @@ pub struct Handle {
     pub(crate) raw: libddwaf_sys::ddwaf_handle,
 }
 impl Handle {
-    /// Creates a new [Context] from this instance.
+    /// Creates a new [`Context`] from this instance.
     #[must_use]
     pub fn new_context(&self) -> Context {
         Context {
@@ -35,7 +35,7 @@ impl Handle {
 
     fn call_cstr_array_fn(
         &self,
-        f: unsafe extern "C-unwind" fn(
+        f: unsafe extern "C" fn(
             libddwaf_sys::ddwaf_handle,
             *mut u32,
         ) -> *const *const std::os::raw::c_char,

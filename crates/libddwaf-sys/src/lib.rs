@@ -21,7 +21,7 @@ impl ddwaf_object {
     /// Drops the key associated with the receiving [`ddwaf_object`].
     ///
     /// # Safety
-    /// The key, if present, must be a raw-converted Box<[u8]>. After this method returns, the
+    /// The key, if present, must be a raw-converted [`Box<[u8]>`]. After this method returns, the
     /// values of [`ddwaf_object::parameterName`] and [`ddwaf_object::parameterNameLength`] must be
     /// replaced as they will no longer be valid.
     ///
@@ -33,9 +33,10 @@ impl ddwaf_object {
         }
         let len =
             usize::try_from(self.parameterNameLength).expect("key is too large for this platform");
-        let slice: &mut [u8] =
-            std::slice::from_raw_parts_mut(self.parameterName.cast::<u8>().cast_mut(), len);
-        drop(Box::from_raw(std::ptr::from_mut(slice)));
+        let slice: &mut [u8] = unsafe {
+            std::slice::from_raw_parts_mut(self.parameterName.cast::<u8>().cast_mut(), len)
+        };
+        drop(unsafe { Box::from_raw(std::ptr::from_mut(slice)) });
     }
 
     /// Drops the array data associated with the receiving [`ddwaf_object`].
@@ -53,15 +54,15 @@ impl ddwaf_object {
         if self.nbEntries == 0 {
             return;
         }
-        let array = self.__bindgen_anon_1.array;
+        let array = unsafe { self.__bindgen_anon_1.array };
         let len = isize::try_from(self.nbEntries).expect("array is too large for this platform");
         for i in 0..len {
-            let elem = &mut *array.offset(i);
-            elem.drop_object();
+            let elem = unsafe { &mut *array.offset(i) };
+            unsafe { elem.drop_object() };
         }
         #[allow(clippy::cast_possible_truncation)] // We could cast to isize, and usize is wider.
         let layout = Layout::array::<ddwaf_object>(self.nbEntries as usize).unwrap();
-        std::alloc::dealloc(array.cast(), layout);
+        unsafe { std::alloc::dealloc(array.cast(), layout) };
     }
 
     /// Drops the map data associated with the receiving [`ddwaf_object`].
@@ -79,16 +80,16 @@ impl ddwaf_object {
         if self.nbEntries == 0 {
             return;
         }
-        let array = self.__bindgen_anon_1.array;
+        let array = unsafe { self.__bindgen_anon_1.array };
         let len = isize::try_from(self.nbEntries).expect("map is too large for this platform");
         for i in 0..len {
-            let elem = &mut *array.offset(i);
-            elem.drop_key();
-            elem.drop_object();
+            let elem = unsafe { &mut *array.offset(i) };
+            unsafe { elem.drop_key() };
+            unsafe { elem.drop_object() };
         }
         #[allow(clippy::cast_possible_truncation)] // We could cast to isize, and usize is wider.
         let layout = Layout::array::<ddwaf_object>(self.nbEntries as usize).unwrap();
-        std::alloc::dealloc(array.cast(), layout);
+        unsafe { std::alloc::dealloc(array.cast(), layout) };
     }
 
     /// Drops the value associated with the receiving [`ddwaf_object`].
@@ -99,9 +100,9 @@ impl ddwaf_object {
     /// methods apply.
     pub unsafe fn drop_object(&mut self) {
         match self.type_ {
-            DDWAF_OBJ_STRING => self.drop_string(),
-            DDWAF_OBJ_ARRAY => self.drop_array(),
-            DDWAF_OBJ_MAP => self.drop_map(),
+            DDWAF_OBJ_STRING => unsafe { self.drop_string() },
+            DDWAF_OBJ_ARRAY => unsafe { self.drop_array() },
+            DDWAF_OBJ_MAP => unsafe { self.drop_map() },
             _ => { /* nothing to do */ }
         }
     }
@@ -117,13 +118,13 @@ impl ddwaf_object {
     /// If the string is too large for this platform (can only happens on 32-bit platforms).
     pub unsafe fn drop_string(&mut self) {
         debug_assert_eq!(self.type_, DDWAF_OBJ_STRING);
-        let sval = self.__bindgen_anon_1.stringValue;
+        let sval = unsafe { self.__bindgen_anon_1.stringValue };
         if sval.is_null() {
             return;
         }
         let len = usize::try_from(self.nbEntries).expect("string is too large for this platform");
-        let slice: &mut [u8] = std::slice::from_raw_parts_mut(sval as *mut _, len);
-        drop(Box::from_raw(slice));
+        let slice: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(sval as *mut _, len) };
+        drop(unsafe { Box::from_raw(slice) });
     }
 }
 impl std::cmp::PartialEq<ddwaf_object> for ddwaf_object {

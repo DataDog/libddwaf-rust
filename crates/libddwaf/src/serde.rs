@@ -1,4 +1,5 @@
-#![doc = "Implementations of [serde::Deserialize] for [object::WafObject](crate::object::WafObject) and [object::WafMap](crate::object::WafMap)."]
+//! Implementations of [`serde::Deserialize`] for [`object::WafObject`](crate::object::WafObject) and
+//! [`object::WafMap`](crate::object::WafMap).
 
 use std::borrow::Cow;
 

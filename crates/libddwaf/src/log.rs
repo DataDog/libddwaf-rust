@@ -1,4 +1,4 @@
-#![doc = "Access to the in-app WAF's logging facility."]
+//! Access to the in-app WAF's logging facility.
 
 use std::ffi::CStr;
 use std::{error, fmt, slice};
@@ -103,7 +103,7 @@ impl error::Error for UnknownLogLevelError {}
 
 /// Wraps the log callback function (stored in [`LOG_CB`]) to convert the raw pointers provided by the C/C++ library into
 /// somewhat easier to consume types.
-extern "C-unwind" fn bridge_log_cb(
+extern "C" fn bridge_log_cb(
     level: libddwaf_sys::DDWAF_LOG_LEVEL,
     file: *const std::os::raw::c_char,
     function: *const std::os::raw::c_char,

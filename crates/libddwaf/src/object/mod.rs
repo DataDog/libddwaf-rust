@@ -458,7 +458,7 @@ macro_rules! typed_object {
 
 typed_object!(WafObjectType::Invalid => WafInvalid);
 typed_object!(WafObjectType::Signed => WafSigned {
-    /// Creates a new [WafSigned] with the provided value.
+    /// Creates a new [`WafSigned`] with the provided value.
     #[must_use]
     pub const fn new(val: i64) -> Self {
         Self {
@@ -473,14 +473,14 @@ typed_object!(WafObjectType::Signed => WafSigned {
         }
     }
 
-    /// Returns the value of this [WafSigned].
+    /// Returns the value of this [`WafSigned`].
     #[must_use]
     pub const fn value(&self) -> i64 {
         unsafe { self.raw.__bindgen_anon_1.intValue }
     }
 });
 typed_object!(WafObjectType::Unsigned => WafUnsigned {
-    /// Creates a new [WafUnsigned] with the provided value.
+    /// Creates a new [`WafUnsigned`] with the provided value.
     #[must_use]
     pub const fn new (val: u64) -> Self {
         Self {
@@ -495,14 +495,14 @@ typed_object!(WafObjectType::Unsigned => WafUnsigned {
         }
     }
 
-    /// Retuns the value of this [WafUnsigned].
+    /// Retuns the value of this [`WafUnsigned`].
     #[must_use]
     pub const fn value(&self) -> u64 {
         unsafe { self.raw.__bindgen_anon_1.uintValue }
     }
 });
 typed_object!(WafObjectType::String => WafString {
-    /// Creates a new [WafString] with the provided value.
+    /// Creates a new [`WafString`] with the provided value.
     pub fn new(val: impl AsRef<[u8]>) -> Self {
         let val = val.as_ref();
         let ptr = if val.is_empty() {
@@ -524,7 +524,7 @@ typed_object!(WafObjectType::String => WafString {
         }
     }
 
-    /// Returns the length of this [WafString], in bytes.
+    /// Returns the length of this [`WafString`], in bytes.
     ///
     /// # Panics
     /// Panics if the string is larger than [`usize::MAX`] bytes. This can only happen on
@@ -534,13 +534,13 @@ typed_object!(WafObjectType::String => WafString {
         usize::try_from(self.raw.nbEntries).expect("string is too large for this platform")
     }
 
-    /// Returns true if this [WafString] is empty.
+    /// Returns true if this [`WafString`] is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Returns a slice of the bytes from this [WafString].
+    /// Returns a slice of the bytes from this [`WafString`].
     #[must_use]
     pub fn bytes(&self) -> &[u8] {
         debug_assert_eq!(self.raw.type_, libddwaf_sys::DDWAF_OBJ_STRING);
@@ -556,7 +556,7 @@ typed_object!(WafObjectType::String => WafString {
         }
     }
 
-    /// Returns a string slice from this [WafString].
+    /// Returns a string slice from this [`WafString`].
     ///
     /// # Errors
     /// Returns an error if the underlying data is not a valid UTF-8 string, under the same conditions as
@@ -566,8 +566,8 @@ typed_object!(WafObjectType::String => WafString {
     }
 });
 typed_object!(WafObjectType::Array => WafArray {
-    /// Creates a new [WafArray] with the provided size. All values in the array are initialized
-    /// to an invalid [WafObject] instance.
+    /// Creates a new [`WafArray`] with the provided size. All values in the array are initialized
+    /// to an invalid [`WafObject`] instance.
     ///
     /// # Panics
     /// Panics when the provided `nb_entries` is larger than what the current platform can represent in an [`usize`].
@@ -589,7 +589,7 @@ typed_object!(WafObjectType::Array => WafArray {
         }
     }
 
-    /// Returns the length of this [WafArray].
+    /// Returns the length of this [`WafArray`].
     ///
     /// # Panics
     /// Panics if the array is larger than [`usize::MAX`] elements. This can only happen on
@@ -599,27 +599,27 @@ typed_object!(WafObjectType::Array => WafArray {
         usize::try_from(self.raw.nbEntries).expect("array is too large for this platform")
     }
 
-    /// Returns true if this [WafArray] is empty.
+    /// Returns true if this [`WafArray`] is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Returns an iterator over the [`Keyed<WafObject>`]s in this [WafMap].
+    /// Returns an iterator over the [`Keyed<WafObject>`]s in this [`WafMap`].
     pub fn iter(&self) -> impl Iterator<Item = &WafObject> {
         let slice : &[WafObject] = self.as_ref();
         slice.iter()
     }
 
-    /// Returns a mutable iterator over the [`Keyed<WafObject>`]s in this [WafMap].
+    /// Returns a mutable iterator over the [`Keyed<WafObject>`]s in this [`WafMap`].
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut WafObject> {
         let slice : &mut [WafObject] = AsMut::as_mut(self);
         slice.iter_mut()
     }
 });
 typed_object!(WafObjectType::Map => WafMap {
-    /// Creates a new [WafMap] with the provided size. All values in the map are initialized
-    /// to an invalid [WafObject] instance with a blank key.
+    /// Creates a new [`WafMap`] with the provided size. All values in the map are initialized
+    /// to an invalid [`WafObject`] instance with a blank key.
     ///
     /// # Panics
     /// Panics when the provided `nbEntries` is larger than what the current platform can represent in an [`usize`].
@@ -641,7 +641,7 @@ typed_object!(WafObjectType::Map => WafMap {
         }
     }
 
-    /// Returns the length of this [WafMap].
+    /// Returns the length of this [`WafMap`].
     ///
     /// # Panics
     /// Panics if the map is larger than [`usize::MAX`] elements. This can only happen on platforms
@@ -651,19 +651,19 @@ typed_object!(WafObjectType::Map => WafMap {
         usize::try_from(self.raw.nbEntries).expect("map is too large for this platform")
     }
 
-    /// Returns true if this [WafMap] is empty.
+    /// Returns true if this [`WafMap`] is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Returns an iterator over the [`Keyed<WafObject>`]s in this [WafMap].
+    /// Returns an iterator over the [`Keyed<WafObject>`]s in this [`WafMap`].
     pub fn iter(&self) -> impl Iterator<Item = &Keyed<WafObject>> {
         let slice : &[Keyed<WafObject>] = self.as_ref();
         slice.iter()
     }
 
-    /// Returns a mutable iterator over the [`Keyed<WafObject>`]s in this [WafMap].
+    /// Returns a mutable iterator over the [`Keyed<WafObject>`]s in this [`WafMap`].
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Keyed<WafObject>> {
         let slice : &mut [Keyed<WafObject>] = AsMut::as_mut(self);
         slice.iter_mut()
@@ -706,7 +706,7 @@ typed_object!(WafObjectType::Map => WafMap {
     }
 });
 typed_object!(WafObjectType::Bool => WafBool {
-    /// Creates a new [WafBool] with the provided value.
+    /// Creates a new [`WafBool`] with the provided value.
     #[must_use]
     pub const fn new(val: bool) -> Self {
         Self {
@@ -721,14 +721,14 @@ typed_object!(WafObjectType::Bool => WafBool {
         }
     }
 
-    /// Returns the value of this [WafBool].
+    /// Returns the value of this [`WafBool`].
     #[must_use]
     pub const fn value(&self) -> bool {
         unsafe { self.raw.__bindgen_anon_1.boolean }
     }
 });
 typed_object!(WafObjectType::Float => WafFloat {
-    /// Creates a new [WafFloat] with the provided value.
+    /// Creates a new [`WafFloat`] with the provided value.
     #[must_use]
     pub const fn new(val: f64) -> Self {
         Self {
@@ -743,14 +743,14 @@ typed_object!(WafObjectType::Float => WafFloat {
         }
     }
 
-    /// Returns the value of this [WafFloat].
+    /// Returns the value of this [`WafFloat`].
     #[must_use]
     pub const fn value(&self) -> f64 {
         unsafe { self.raw.__bindgen_anon_1.f64_ }
     }
 });
 typed_object!(WafObjectType::Null => WafNull {
-    /// Creates a new [WafNull].
+    /// Creates a new [`WafNull`].
     #[must_use]
     pub const fn new() -> Self {
         Self { raw: libddwaf_sys::ddwaf_object {
