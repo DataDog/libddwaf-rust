@@ -10,7 +10,7 @@ use crate::{Config, Handle};
 /// through remote configuration.
 #[repr(transparent)]
 pub struct Builder {
-    raw: crate::bindings::ddwaf_builder,
+    raw: libddwaf_sys::ddwaf_builder,
 }
 impl Builder {
     /// Creates a new [Builder] instance using the provided [Config]. Returns [None] if the
@@ -18,7 +18,7 @@ impl Builder {
     #[must_use]
     pub fn new(config: &Config) -> Option<Self> {
         let builder = Builder {
-            raw: unsafe { crate::bindings::ddwaf_builder_init(&raw const config.raw) },
+            raw: unsafe { libddwaf_sys::ddwaf_builder_init(&raw const config.raw) },
         };
         if builder.raw.is_null() {
             return None;
@@ -37,7 +37,7 @@ impl Builder {
     pub fn add_or_update_config(
         &mut self,
         path: &str,
-        ruleset: &impl AsRef<crate::bindings::ddwaf_object>,
+        ruleset: &impl AsRef<libddwaf_sys::ddwaf_object>,
         diagnostics: Option<&mut WafOwned<WafMap>>,
     ) -> bool {
         debug_assert!(
@@ -50,7 +50,7 @@ impl Builder {
         );
         let path_len = u32::try_from(path.len()).expect("path is too long");
         unsafe {
-            crate::bindings::ddwaf_builder_add_or_update_config(
+            libddwaf_sys::ddwaf_builder_add_or_update_config(
                 self.raw,
                 path.as_ptr().cast(),
                 path_len,
@@ -69,7 +69,7 @@ impl Builder {
     pub fn remove_config(&mut self, path: &str) -> bool {
         let path_len = u32::try_from(path.len()).expect("path is too long");
         unsafe {
-            crate::bindings::ddwaf_builder_remove_config(self.raw, path.as_ptr().cast(), path_len)
+            libddwaf_sys::ddwaf_builder_remove_config(self.raw, path.as_ptr().cast(), path_len)
         }
     }
 
@@ -83,7 +83,7 @@ impl Builder {
         let filter = filter.unwrap_or("");
         let filter_len = u32::try_from(filter.len()).expect("filter is too long");
         unsafe {
-            crate::bindings::ddwaf_builder_get_config_paths(
+            libddwaf_sys::ddwaf_builder_get_config_paths(
                 self.raw,
                 null_mut(),
                 filter.as_ptr().cast(),
@@ -103,7 +103,7 @@ impl Builder {
         let filter = filter.unwrap_or("");
         let filter_len = u32::try_from(filter.len()).expect("filter is too long");
         let _ = unsafe {
-            crate::bindings::ddwaf_builder_get_config_paths(
+            libddwaf_sys::ddwaf_builder_get_config_paths(
                 self.raw,
                 res.as_raw_mut(),
                 filter.as_ptr().cast(),
@@ -119,7 +119,7 @@ impl Builder {
     /// configuration contains no active instructions (no rules nor processors are available).
     #[must_use]
     pub fn build(&mut self) -> Option<Handle> {
-        let raw = unsafe { crate::bindings::ddwaf_builder_build_instance(self.raw) };
+        let raw = unsafe { libddwaf_sys::ddwaf_builder_build_instance(self.raw) };
         if raw.is_null() {
             return None;
         }
@@ -128,7 +128,7 @@ impl Builder {
 }
 impl Drop for Builder {
     fn drop(&mut self) {
-        unsafe { crate::bindings::ddwaf_builder_destroy(self.raw) }
+        unsafe { libddwaf_sys::ddwaf_builder_destroy(self.raw) }
     }
 }
 

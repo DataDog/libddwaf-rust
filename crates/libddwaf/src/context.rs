@@ -10,7 +10,7 @@ use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject, WafOwned
 /// This is obtained by calling [`Handle::new_context`][crate::Handle::new_context], and a given [`Context`] should only
 /// be used to handle data for a single request.
 pub struct Context {
-    pub(crate) raw: crate::bindings::ddwaf_context,
+    pub(crate) raw: libddwaf_sys::ddwaf_context,
     pub(crate) keepalive: Vec<WafMap>,
 }
 impl Context {
@@ -34,12 +34,12 @@ impl Context {
                 std::ptr::from_mut(f.as_raw_mut()).cast()
             });
         let ephemeral_ref = ephemeral_data
-            .map(AsRef::<crate::bindings::ddwaf_object>::as_ref)
+            .map(AsRef::<libddwaf_sys::ddwaf_object>::as_ref)
             // The bindings take non-const pointers to the data, but actually does not change it.
             .map_or(null_mut(), |r| std::ptr::from_ref(r).cast_mut());
 
         let status = unsafe {
-            crate::bindings::ddwaf_run(
+            libddwaf_sys::ddwaf_run(
                 self.raw,
                 persistent_ref,
                 ephemeral_ref,
@@ -48,7 +48,7 @@ impl Context {
             )
         };
         match status {
-            crate::bindings::DDWAF_ERR_INTERNAL => {
+            libddwaf_sys::DDWAF_ERR_INTERNAL => {
                 // It's unclear whether the persistent data needs to be kept alive or not, so we
                 // keep it alive to be on the safe side.
                 if let Some(obj) = persistent_data {
@@ -56,16 +56,16 @@ impl Context {
                 }
                 Err(RunError::InternalError)
             }
-            crate::bindings::DDWAF_ERR_INVALID_OBJECT => Err(RunError::InvalidObject),
-            crate::bindings::DDWAF_ERR_INVALID_ARGUMENT => Err(RunError::InvalidArgument),
-            crate::bindings::DDWAF_OK => {
+            libddwaf_sys::DDWAF_ERR_INVALID_OBJECT => Err(RunError::InvalidObject),
+            libddwaf_sys::DDWAF_ERR_INVALID_ARGUMENT => Err(RunError::InvalidArgument),
+            libddwaf_sys::DDWAF_OK => {
                 // We need to keep the persistent data alive as the WAF may hold references to it.
                 if let Some(obj) = persistent_data {
                     self.keepalive.push(obj);
                 }
                 Ok(RunResult::NoMatch(unsafe { res.assume_init() }))
             }
-            crate::bindings::DDWAF_MATCH => {
+            libddwaf_sys::DDWAF_MATCH => {
                 // We need to keep the persistent data alive as the WAF may hold references to it.
                 if let Some(obj) = persistent_data {
                     self.keepalive.push(obj);
@@ -74,7 +74,7 @@ impl Context {
             }
             unknown => unreachable!(
                 "Unexpected value returned by {}: 0x{:02X}",
-                stringify!(crate::bindings::ddwaf_run),
+                stringify!(libddwaf_sys::ddwaf_run),
                 unknown
             ),
         }
@@ -82,7 +82,7 @@ impl Context {
 }
 impl Drop for Context {
     fn drop(&mut self) {
-        unsafe { crate::bindings::ddwaf_context_destroy(self.raw) }
+        unsafe { libddwaf_sys::ddwaf_context_destroy(self.raw) }
     }
 }
 // Safety: Operations that mutate the internal state are made safe by requiring a mutable borrow on

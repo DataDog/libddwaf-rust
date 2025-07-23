@@ -1,6 +1,5 @@
 {
     "coverage-gutters.coverageBaseDir": "target",
-    "rust-analyzer.cargo.features": ["serde"],
     "[rust]": {
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "rust-lang.rust-analyzer"
