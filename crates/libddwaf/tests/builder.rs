@@ -1,6 +1,7 @@
 use libddwaf::{
+    Builder, Config,
     object::{WafMap, WafOwned},
-    waf_array, waf_map, Builder, Config,
+    waf_array, waf_map,
 };
 
 #[test]
