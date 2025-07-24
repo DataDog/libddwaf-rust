@@ -160,7 +160,7 @@ impl WafObject {
     /// # Safety
     /// The caller must ensure that the [`WafObject`] can be accurately represented by `T`.
     pub(crate) unsafe fn as_type_unchecked<T: TypedWafObject>(&self) -> &T {
-        self.as_ref().unchecked_as_ref::<T>()
+        unsafe { self.as_ref().unchecked_as_ref::<T>() }
     }
 
     /// Returns a mutable reference to this value as a `T` if its type corresponds.
@@ -1108,7 +1108,7 @@ impl Keyed<WafMap> {
 }
 impl<T: AsRawMutObject> AsRawMutObject for Keyed<T> {
     unsafe fn as_raw_mut(&mut self) -> &mut libddwaf_sys::ddwaf_object {
-        self.value.as_raw_mut()
+        unsafe { self.value.as_raw_mut() }
     }
 }
 impl<T: AsRawMutObject> crate::private::Sealed for Keyed<T> {}
@@ -1201,7 +1201,7 @@ impl UncheckedAsRef for libddwaf_sys::ddwaf_object {
     unsafe fn unchecked_as_ref<T: AsRef<libddwaf_sys::ddwaf_object> + crate::private::Sealed>(
         &self,
     ) -> &T {
-        &*(std::ptr::from_ref(self).cast())
+        unsafe { &*(std::ptr::from_ref(self).cast()) }
     }
 
     unsafe fn unchecked_as_ref_mut<
@@ -1209,7 +1209,7 @@ impl UncheckedAsRef for libddwaf_sys::ddwaf_object {
     >(
         &mut self,
     ) -> &mut T {
-        &mut *(std::ptr::from_mut(self).cast())
+        unsafe { &mut *(std::ptr::from_mut(self).cast()) }
     }
 }
 trait UncheckedAsWafObject: crate::private::Sealed {
@@ -1251,7 +1251,7 @@ impl<T: UncheckedAsRef> UncheckedAsWafObject for T {
     /// ([`libddwaf_sys::ddwaf_object::drop_key`] and [`libddwaf_sys::ddwaf_object::drop_object`]) can be called
     /// on self.
     unsafe fn as_keyed_object_mut(&mut self) -> &mut Keyed<WafObject> {
-        self.unchecked_as_ref_mut::<Keyed<WafObject>>()
+        unsafe { self.unchecked_as_ref_mut::<Keyed<WafObject>>() }
     }
 }
 
