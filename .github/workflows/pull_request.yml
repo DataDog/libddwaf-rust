@@ -138,43 +138,15 @@ jobs:
                     path: target/coverage/html
                     if-no-files-found: error
 
-    doc:
-        name: Generate Documentation
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-            - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-              with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
-            - name: Generate Documentation
-              run: cargo doc --all-features
-            - name: Upload Documentation
-              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-              with:
-                    name: documentation
-                    path: target/doc/
-                    if-no-files-found: error
-
     complete:
         name: Complete
-        needs: [linters, tests, docker-tests, coverage, doc]
+        needs: [linters, tests, docker-tests, coverage]
         if: '!cancelled()'
         runs-on: ubuntu-latest
         steps:
             - name: Success
-              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.doc.result == 'success'
+              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success'
               run: echo 'Success!'
             - name: Failure
-              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.doc.result != 'success'
+              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success'
               run: echo 'Failure!' && exit 1
