@@ -6,6 +6,10 @@ on:
     push:
         branches: [master, main]
 
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.number || ((github.event_name == 'push' && github.sha) || github.ref) }}
+    cancel-in-progress: true
+
 permissions: read-all
 
 jobs:
@@ -90,6 +94,20 @@ jobs:
             - name: Run Tests
               run: make test
 
+    docker-tests:
+        name: Tests (${{ matrix.variant}} | ${{ matrix.runs-on == 'ubuntu-latest' && 'x86_64' || 'aarch64' }})
+        strategy:
+            matrix:
+                runs-on: [ubuntu-latest, ubuntu-24.04-arm]
+                variant: [alpine, lambda-al2]
+            fail-fast: false
+        runs-on: ${{ matrix.runs-on }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+            - name: Test
+              run: docker build -f ".github/workflows/pull_request/Dockerfile.${{ matrix.variant }}" .
+
     coverage:
         name: Coverage
         runs-on: ubuntu-latest
@@ -120,43 +138,15 @@ jobs:
                     path: target/coverage/html
                     if-no-files-found: error
 
-    doc:
-        name: Generate Documentation
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-            - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-              with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
-            - name: Generate Documentation
-              run: cargo doc --all-features
-            - name: Upload Documentation
-              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-              with:
-                    name: documentation
-                    path: target/doc/
-                    if-no-files-found: error
-
     complete:
         name: Complete
-        needs: [linters, tests, coverage, doc]
+        needs: [linters, tests, docker-tests, coverage]
         if: '!cancelled()'
         runs-on: ubuntu-latest
         steps:
             - name: Success
-              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.coverage.result == 'success' && needs.doc.result == 'success'
+              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success'
               run: echo 'Success!'
             - name: Failure
-              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.coverage.result != 'success' || needs.doc.result != 'success'
+              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success'
               run: echo 'Failure!' && exit 1
