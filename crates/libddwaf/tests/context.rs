@@ -13,8 +13,9 @@ use std::{
 };
 
 use libddwaf::{
+    Builder, Config, RunResult,
     object::{WafArray, WafMap, WafObject, WafOwned},
-    waf_array, waf_map, Builder, Config, RunResult,
+    waf_array, waf_map,
 };
 
 static ARACHNI_RULE: LazyLock<WafMap> = LazyLock::new(|| {
