@@ -1,0 +1,15 @@
+FROM alpine:3.22.0
+
+RUN apk add --no-cache curl make build-base clang-libclang
+
+RUN curl https://sh.rustup.rs -sSf |                                            \
+    sh -s -- --profile minimal                                                  \
+             --default-toolchain 1.85.0-$(uname -m)-unknown-linux-musl -y
+
+ENV PATH=/root/.cargo/bin:$PATH
+
+RUN --mount=type=bind,source=.,target=/workspace/src,rw                         \
+    --mount=type=cache,target=/workspace/src/target,rw                          \
+    --mount=type=cache,target=/root/.cargo/git                                  \
+    --mount=type=cache,target=/root/.cargo/registry                             \
+    cd /workspace/src && make test
