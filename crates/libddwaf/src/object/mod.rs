@@ -135,6 +135,10 @@ pub struct WafObject {
 impl WafObject {
     /// Creates a new [`WafObject`] from a JSON string.
     ///
+    /// This function is not intended to be used with un-trusted/adversarial
+    /// input. The typical use-case is to facilitate parsing rulesets for use
+    /// with [`crate::builder::Builder::add_or_update_config`].
+    ///
     /// # Returns
     /// Returns [`None`] if parsing the JSON string into a [`WafObject`] was not
     /// possible, or if the input JSON string is larger than [`u32::MAX`] bytes.
