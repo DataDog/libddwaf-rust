@@ -133,6 +133,25 @@ pub struct WafObject {
     raw: libddwaf_sys::ddwaf_object,
 }
 impl WafObject {
+    /// Creates a new [`WafObject`] from a JSON string.
+    ///
+    /// # Returns
+    /// Returns [`None`] if parsing the JSON string into a [`WafObject`] was not
+    /// possible, or if the input JSON string is larger than [`u32::MAX`] bytes.
+    pub fn from_json(json: impl AsRef<[u8]>) -> Option<WafOwned<Self>> {
+        let mut obj = WafOwned::<Self>::default();
+        let data = json.as_ref();
+        let Ok(len) = u32::try_from(data.len()) else {
+            return None;
+        };
+        if !unsafe {
+            libddwaf_sys::ddwaf_object_from_json(obj.as_raw_mut(), data.as_ptr().cast(), len)
+        } {
+            return None;
+        }
+        Some(obj)
+    }
+
     /// Returns the [`WafObjectType`] of the underlying value.
     ///
     /// Returns [`WafObjectType::Invalid`] if the underlying value's type is not set to a
@@ -160,7 +179,7 @@ impl WafObject {
     /// # Safety
     /// The caller must ensure that the [`WafObject`] can be accurately represented by `T`.
     pub(crate) unsafe fn as_type_unchecked<T: TypedWafObject>(&self) -> &T {
-        self.as_ref().unchecked_as_ref::<T>()
+        unsafe { self.as_ref().unchecked_as_ref::<T>() }
     }
 
     /// Returns a mutable reference to this value as a `T` if its type corresponds.
@@ -368,6 +387,14 @@ impl<T: AsRawMutObject> DerefMut for WafOwned<T> {
 impl<T: AsRawMutObject> Drop for WafOwned<T> {
     fn drop(&mut self) {
         unsafe { libddwaf_sys::ddwaf_object_free(self.inner.as_raw_mut()) };
+    }
+}
+impl<T: AsRawMutObject> PartialEq<T> for WafOwned<T>
+where
+    T: PartialEq<T>,
+{
+    fn eq(&self, other: &T) -> bool {
+        *self.inner == *other
     }
 }
 
@@ -1108,7 +1135,7 @@ impl Keyed<WafMap> {
 }
 impl<T: AsRawMutObject> AsRawMutObject for Keyed<T> {
     unsafe fn as_raw_mut(&mut self) -> &mut libddwaf_sys::ddwaf_object {
-        self.value.as_raw_mut()
+        unsafe { self.value.as_raw_mut() }
     }
 }
 impl<T: AsRawMutObject> crate::private::Sealed for Keyed<T> {}
@@ -1201,7 +1228,7 @@ impl UncheckedAsRef for libddwaf_sys::ddwaf_object {
     unsafe fn unchecked_as_ref<T: AsRef<libddwaf_sys::ddwaf_object> + crate::private::Sealed>(
         &self,
     ) -> &T {
-        &*(std::ptr::from_ref(self).cast())
+        unsafe { &*(std::ptr::from_ref(self).cast()) }
     }
 
     unsafe fn unchecked_as_ref_mut<
@@ -1209,7 +1236,7 @@ impl UncheckedAsRef for libddwaf_sys::ddwaf_object {
     >(
         &mut self,
     ) -> &mut T {
-        &mut *(std::ptr::from_mut(self).cast())
+        unsafe { &mut *(std::ptr::from_mut(self).cast()) }
     }
 }
 trait UncheckedAsWafObject: crate::private::Sealed {
@@ -1251,7 +1278,7 @@ impl<T: UncheckedAsRef> UncheckedAsWafObject for T {
     /// ([`libddwaf_sys::ddwaf_object::drop_key`] and [`libddwaf_sys::ddwaf_object::drop_object`]) can be called
     /// on self.
     unsafe fn as_keyed_object_mut(&mut self) -> &mut Keyed<WafObject> {
-        self.unchecked_as_ref_mut::<Keyed<WafObject>>()
+        unsafe { self.unchecked_as_ref_mut::<Keyed<WafObject>>() }
     }
 }
 
