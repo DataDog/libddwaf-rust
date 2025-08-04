@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use libddwaf::{Obfuscator, OBFUSCATOR_DEFAULT_KEY_REGEX, OBFUSCATOR_DEFAULT_VAL_REGEX};
+use libddwaf::{OBFUSCATOR_DEFAULT_KEY_REGEX, OBFUSCATOR_DEFAULT_VAL_REGEX, Obfuscator};
 
 #[test]
 pub fn default_obfuscator() {

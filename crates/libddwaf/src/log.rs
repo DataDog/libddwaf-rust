@@ -17,10 +17,8 @@ pub unsafe fn set_log_cb(
     cb: impl Fn(Level, &'static CStr, &'static CStr, u32, &[u8]) + 'static,
     min_level: Level,
 ) {
-    unsafe {
-        LOG_CB = Some(Box::new(cb));
-        libddwaf_sys::ddwaf_set_log_cb(Some(bridge_log_cb), min_level.as_raw());
-    }
+    unsafe { LOG_CB = Some(Box::new(cb)) };
+    unsafe { libddwaf_sys::ddwaf_set_log_cb(Some(bridge_log_cb), min_level.as_raw()) };
 }
 
 /// Resets the log callback function (to the default of "none").
@@ -30,10 +28,8 @@ pub unsafe fn set_log_cb(
 /// This function is unsafe because it writes to a static variable without synchronization.
 /// It should only be used during startup.
 pub unsafe fn reset_log_cb() {
-    unsafe {
-        libddwaf_sys::ddwaf_set_log_cb(None, Level::Off.as_raw());
-        LOG_CB = None;
-    }
+    unsafe { libddwaf_sys::ddwaf_set_log_cb(None, Level::Off.as_raw()) };
+    unsafe { LOG_CB = None };
 }
 
 /// Logging levels supported by the WAF.
