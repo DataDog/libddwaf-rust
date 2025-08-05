@@ -640,3 +640,37 @@ fn try_from_implementations() {
     let obj: WafObject = waf_array!().into();
     assert!(WafArray::try_from(obj).is_ok());
 }
+
+#[test]
+fn test_from_json() {
+    assert_eq!(
+        WafObject::from_json(
+            r#"{
+            "null": null,
+            "unsigned": 1,
+            "signed": -1,
+            "string": "foo",
+            "bool.true": true,
+            "bool.false": false,
+            "array": [false, 1, "two", null]
+        }"#
+        )
+        .expect("should have succeeded"),
+        WafObject::from(waf_map! {
+            ("null", WafNull::default()),
+            ("unsigned", WafUnsigned::from(1u64)),
+            ("signed", WafSigned::from(-1i64)),
+            ("string", WafString::from("foo")),
+            ("bool.true", WafBool::from(true)),
+            ("bool.false", WafBool::from(false)),
+            ("array", WafArray::from([WafObject::from(false), WafObject::from(1u64), WafObject::from("two"), WafNull::default().into()])),
+        })
+    );
+
+    // No data
+    assert!(WafObject::from_json("").is_none());
+    // Invalid JSON (truncated)
+    assert!(WafObject::from_json("{").is_none());
+    // Too large (but otherwise valid)
+    assert!(WafObject::from_json(format!(r#""{}""#, "a".repeat(u32::MAX as usize + 1))).is_none());
+}

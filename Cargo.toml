@@ -5,7 +5,7 @@ default-members = ["crates/*"]
 
 [workspace.package]
 authors = ["DataDog, Inc. <support@datadoghq.com>"]
-version = "1.26.0"
+version = "1.27.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/DataDog/libddwaf-rust"

@@ -133,6 +133,29 @@ pub struct WafObject {
     raw: libddwaf_sys::ddwaf_object,
 }
 impl WafObject {
+    /// Creates a new [`WafObject`] from a JSON string.
+    ///
+    /// This function is not intended to be used with un-trusted/adversarial
+    /// input. The typical use-case is to facilitate parsing rulesets for use
+    /// with [`crate::builder::Builder::add_or_update_config`].
+    ///
+    /// # Returns
+    /// Returns [`None`] if parsing the JSON string into a [`WafObject`] was not
+    /// possible, or if the input JSON string is larger than [`u32::MAX`] bytes.
+    pub fn from_json(json: impl AsRef<[u8]>) -> Option<WafOwned<Self>> {
+        let mut obj = WafOwned::<Self>::default();
+        let data = json.as_ref();
+        let Ok(len) = u32::try_from(data.len()) else {
+            return None;
+        };
+        if !unsafe {
+            libddwaf_sys::ddwaf_object_from_json(obj.as_raw_mut(), data.as_ptr().cast(), len)
+        } {
+            return None;
+        }
+        Some(obj)
+    }
+
     /// Returns the [`WafObjectType`] of the underlying value.
     ///
     /// Returns [`WafObjectType::Invalid`] if the underlying value's type is not set to a
@@ -368,6 +391,14 @@ impl<T: AsRawMutObject> DerefMut for WafOwned<T> {
 impl<T: AsRawMutObject> Drop for WafOwned<T> {
     fn drop(&mut self) {
         unsafe { libddwaf_sys::ddwaf_object_free(self.inner.as_raw_mut()) };
+    }
+}
+impl<T: AsRawMutObject> PartialEq<T> for WafOwned<T>
+where
+    T: PartialEq<T>,
+{
+    fn eq(&self, other: &T) -> bool {
+        *self.inner == *other
     }
 }
 
