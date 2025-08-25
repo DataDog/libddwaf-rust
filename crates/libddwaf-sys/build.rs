@@ -39,12 +39,12 @@ fn main() {
 
     // Output directory
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let download_dir = out_dir.join("download").join(&target);
+    let download_dir = out_dir.join("download");
     let include_dir = download_dir.join("include");
     let lib_dir = download_dir.join("lib");
 
-    // Check if the `static` feature is enabled (which is default).
-    let feature_static = env::var("CARGO_FEATURE_STATIC").is_ok();
+    // Check if the `dynamic` feature is enabled.
+    let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
 
     // Download the archive
     println!("cargo:rerun-if-env-changed=LIBDDWAF_SYS_ARCHIVE_PATH_OVERRIDE");
@@ -166,13 +166,8 @@ fn main() {
         "cargo:rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
-    if feature_static {
+    if !feature_dynamic {
         println!("cargo:rustc-link-lib=static=ddwaf");
-    } else {
-        println!(
-            "cargo:warning=`static` feature is disabled: libddwaf.so {version} will need to be available at runtime."
-        );
-        println!("cargo:rustc-link-lib=dylib=ddwaf");
     }
 
     // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a/.so.
@@ -192,16 +187,22 @@ fn main() {
     println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path");
 
     // Generate bindings with bindgen
-    let bindings = bindgen::Builder::default()
+    let builder = bindgen::Builder::default()
         .header(include_dir.join("ddwaf.h").to_str().unwrap())
         .allowlist_item("^_?ddwaf_.+")
         .blocklist_function("^ddwaf_init$") // This will eventually disappear from libddwaf
         .clang_arg(format!("-I{}", include_dir.to_str().unwrap()))
         .default_visibility(bindgen::FieldVisibilityKind::Public)
         .derive_default(true)
-        .prepend_enum_name(false)
-        .generate()
-        .expect("Failed to generate bindings");
+        .prepend_enum_name(false);
+    let builder = if feature_dynamic {
+        builder
+            .dynamic_library_name("ddwaf")
+            .dynamic_link_require_all(true)
+    } else {
+        builder
+    };
+    let bindings = builder.generate().expect("Failed to generate bindings");
 
     // Write the bindings to the output directory
     let bindings_out_path = out_dir.join("bindings.rs");

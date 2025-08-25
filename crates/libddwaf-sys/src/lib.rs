@@ -4,12 +4,18 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
+#![allow(unsafe_op_in_unsafe_fn)] // Bindgen generates some offending code...
 
 use std::alloc::Layout;
 use std::ptr::null;
 use std::slice;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
+#[cfg(feature = "dynamic")]
+mod dylib;
+#[cfg(feature = "dynamic")]
+pub use dylib::*;
 
 // Implement [Send] and [Sync] for [ddwaf_object]. There is nothing thread unsafe about these unless
 // its pointers are dereferences, which is inherently unsafe anyway.
