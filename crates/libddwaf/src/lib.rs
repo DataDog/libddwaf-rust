@@ -99,7 +99,12 @@ forward!(builder, config, context, handle);
 /// Returns the version of the underlying `libddwaf` library.
 #[must_use]
 pub fn get_version() -> &'static CStr {
-    unsafe { CStr::from_ptr(libddwaf_sys::ddwaf_get_version()) }
+    let ptr = unsafe { libddwaf_sys::ddwaf_get_version() };
+    if ptr.is_null() {
+        unsafe { CStr::from_ptr("".as_ptr().cast()) }
+    } else {
+        unsafe { CStr::from_ptr(ptr) }
+    }
 }
 
 #[cfg(test)]
