@@ -12,7 +12,12 @@ keywords.workspace = true
 links = "ddwaf"
 
 [dependencies]
+lazy_static = { version = "1.5", optional = true }
 libc = "0.2"
+libloading = { version = "0.8", optional = true }
+tempfile = { version = "3", optional = true }
+tracing = { version = "0.1", optional = true }
+zstd = { version = "0.13", optional = true }
 
 [build-dependencies]
 bindgen = "0.72"
@@ -22,11 +27,12 @@ tar = "0.4"
 # Following is to ensure FIPS compliance is possible.
 hyper-rustls = { version = "*", default-features = false, features = ["aws-lc-rs"] }
 rustls = { version = "*", default-features = false, features= ["aws-lc-rs"] }
+zstd = "0.13"
 
 [features]
-default = ["static"]
+default = []
 fips = ["hyper-rustls/fips", "rustls/fips"]
-static = []
+dynamic = ["lazy_static", "libloading", "tempfile", "tracing", "zstd"]
 
 [lints]
 workspace = true

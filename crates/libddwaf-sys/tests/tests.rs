@@ -1,6 +1,18 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
 use libddwaf_sys::*;
+
+#[test]
+fn test_version() {
+    let version = unsafe { ddwaf_get_version() };
+    assert!(!version.is_null());
+    assert_eq!(
+        CString::new(env!("CARGO_PKG_VERSION"))
+            .expect("failed to create CString")
+            .as_c_str(),
+        unsafe { CStr::from_ptr(version) }
+    );
+}
 
 #[test]
 fn test_eq_invalid() {

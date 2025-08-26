@@ -579,6 +579,7 @@ typed_object!(WafObjectType::String => WafString {
         if len == 0 {
             return &[];
         }
+        debug_assert!(!unsafe{ self.raw.__bindgen_anon_1.stringValue }.is_null());
         unsafe {
             std::slice::from_raw_parts(
                 self.raw.__bindgen_anon_1.stringValue.cast(),

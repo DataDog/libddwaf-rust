@@ -116,8 +116,11 @@ extern "C" fn bridge_log_cb(
         if let Some(cb) = &LOG_CB {
             let file = CStr::from_ptr(file);
             let function = CStr::from_ptr(function);
-            let message =
-                slice::from_raw_parts(message.cast(), message_len.try_into().unwrap_or(usize::MAX));
+            let message = if message.is_null() {
+                b"<null>\0"
+            } else {
+                slice::from_raw_parts(message.cast(), message_len.try_into().unwrap_or(usize::MAX))
+            };
             cb(
                 Level::try_from(level).unwrap_or(Level::Error),
                 file,

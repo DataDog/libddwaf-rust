@@ -17,10 +17,10 @@ serde = { version = "1.0", optional = true }
 serde_json = "1.0"
 
 [features]
-default = ["serde", "static"]
+default = ["serde"]
 fips = ["libddwaf-sys/fips"]
 serde = ["dep:serde"]
-static = ["libddwaf-sys/static"]
+dynamic = ["libddwaf-sys/dynamic"]
 
 [lints]
 workspace = true
