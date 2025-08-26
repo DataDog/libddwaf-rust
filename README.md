@@ -33,15 +33,9 @@ The `libddwaf-sys` crate uses [`bindgen`][bindgen], which requires `libclang.so`
 ### `serde`
 The `serde` feature (enabled by default) provides `serde` implementations for `libddwaf::objects::*` types.
 
-### `static`
-The `static` feature (enabled by default) causes the native `libddwaf` library to be statically linked into the
-`libddwaf-sys` crate, which makes distribution easier. On Linux, is only supported on `x86_64` and `arm64` platforms at
-the moment.
-
-While this feature should generally be safe to use, it is possible for it to cause symbol resolution conflicts with
-other native libraries. Should that be the case, disabling this feature should alleviate the problem.
-
-> [!CAUTION]
-> Disabling the `static` feature implies the correct version of `libddwaf.so` must be made available to the dynamic
-> loader at run-time. This is automatically handled by commands such as `cargo test`, but needs to be manually fulfilled
-> when deploying a binary produced by `cargo build`.
+### `dynamic`
+The `dynamic` feature (disabled by default) causes the native `libddwaf` library to be loaded at run-time using
+`libloading` instead of being statically linked into the `libddwaf-sys` crate. Enabling the `dynamic` feature can be
+useful to reduce the stat-up overhead in case the `libddwaf` features are not always used (such as if the security
+features are opt-in); but it increases the size of the final binary & decreases overall performance of using those
+functions (due to their being dynamically dispatched).
