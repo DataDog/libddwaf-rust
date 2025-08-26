@@ -646,14 +646,14 @@ fn test_from_json() {
     assert_eq!(
         WafObject::from_json(
             r#"{
-            "null": null,
-            "unsigned": 1,
-            "signed": -1,
-            "string": "foo",
-            "bool.true": true,
-            "bool.false": false,
-            "array": [false, 1, "two", null]
-        }"#
+                "null": null,
+                "unsigned": 1,
+                "signed": -1,
+                "string": "foo",
+                "bool.true": true,
+                "bool.false": false,
+                "array": [false, 1, "two", null]
+            }"#
         )
         .expect("should have succeeded"),
         WafObject::from(waf_map! {

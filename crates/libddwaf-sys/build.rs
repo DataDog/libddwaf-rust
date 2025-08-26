@@ -39,7 +39,7 @@ fn main() {
 
     // Output directory
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let download_dir = out_dir.join("download");
+    let download_dir = out_dir.join("download").join(&target);
     let include_dir = download_dir.join("include");
     let lib_dir = download_dir.join("lib");
 
@@ -47,53 +47,53 @@ fn main() {
     let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
 
     // Download the archive
-    println!("cargo:rerun-if-env-changed=LIBDDWAF_SYS_ARCHIVE_PATH_OVERRIDE");
-    let (archive, is_override): (Box<dyn io::Read>, _) =
-        if let Ok(override_archive) = env::var("LIBDDWAF_SYS_ARCHIVE_PATH_OVERRIDE") {
-            println!("cargo:warning=Using local archive at {override_archive:?}");
-            (
-                Box::new(
-                    fs::File::open(&override_archive)
-                        .expect("failed to open file at $LIBDDWAF_SYS_ARCHIVE_PATH_OVERRIDE"),
-                ),
-                true,
-            )
-        } else {
-            // Base URL for downloading the library
-            let base_url = "https://github.com/DataDog/libddwaf/releases/download";
+    let (archive, soname, is_override) = {
+        // Base URL for downloading the library
+        let base_url = "https://github.com/DataDog/libddwaf/releases/download";
 
-            // Map the target triple to the correct library archive
-            let archive_name = match target.as_str() {
-                "x86_64-unknown-linux-gnu" => {
-                    format!("libddwaf-{version}-x86_64-linux-musl.tar.gz")
-                }
-                "x86_64-unknown-linux-musl" => {
-                    format!("libddwaf-{version}-x86_64-linux-musl.tar.gz")
-                }
-                "aarch64-unknown-linux-gnu" => {
-                    format!("libddwaf-{version}-aarch64-linux-musl.tar.gz")
-                }
-                "aarch64-unknown-linux-musl" => {
-                    format!("libddwaf-{version}-aarch64-linux-musl.tar.gz")
-                }
-                "armv7-unknown-linux-musleabihf" => {
-                    format!("libddwaf-{version}-armv7-linux-musl.tar.gz")
-                }
-                "aarch64-apple-darwin" => format!("libddwaf-{version}-darwin-arm64.tar.gz"),
-                "x86_64-apple-darwin" => format!("libddwaf-{version}-darwin-x86_64.tar.gz"),
-                target => panic!("Unsupported target platform: {target}"),
-            };
-
-            // Construct the download URL
-            let archive_url = format!("{base_url}/{version}/{archive_name}");
-            let response = get(&archive_url).expect("Failed to download archive");
-            assert!(
-                response.status().is_success(),
-                "Failed to download archive from {archive_url}: {status}",
-                status = response.status()
-            );
-            (Box::new(response), false)
+        // Map the target triple to the correct library archive
+        let (archive_name, soname) = match target.as_str() {
+            "x86_64-unknown-linux-gnu" => (
+                format!("libddwaf-{version}-x86_64-linux-musl.tar.gz"),
+                "libddwaf.so",
+            ),
+            "x86_64-unknown-linux-musl" => (
+                format!("libddwaf-{version}-x86_64-linux-musl.tar.gz"),
+                "libddwaf.so",
+            ),
+            "aarch64-unknown-linux-gnu" => (
+                format!("libddwaf-{version}-aarch64-linux-musl.tar.gz"),
+                "libddwaf.so",
+            ),
+            "aarch64-unknown-linux-musl" => (
+                format!("libddwaf-{version}-aarch64-linux-musl.tar.gz"),
+                "libddwaf.so",
+            ),
+            "armv7-unknown-linux-musleabihf" => (
+                format!("libddwaf-{version}-armv7-linux-musl.tar.gz"),
+                "libddwaf.so",
+            ),
+            "aarch64-apple-darwin" => (
+                format!("libddwaf-{version}-darwin-arm64.tar.gz"),
+                "libddwaf.dylib",
+            ),
+            "x86_64-apple-darwin" => (
+                format!("libddwaf-{version}-darwin-x86_64.tar.gz"),
+                "libddwaf.dylib",
+            ),
+            target => panic!("Unsupported target platform: {target}"),
         };
+
+        // Construct the download URL
+        let archive_url = format!("{base_url}/{version}/{archive_name}");
+        let response = get(&archive_url).expect("Failed to download archive");
+        assert!(
+            response.status().is_success(),
+            "Failed to download archive from {archive_url}: {status}",
+            status = response.status()
+        );
+        (response, soname, false)
+    };
 
     // Extract the archive
     let ar = env::var("AR").unwrap_or("ar".to_string());
@@ -189,13 +189,32 @@ fn main() {
     // Generate bindings with bindgen
     let builder = bindgen::Builder::default()
         .header(include_dir.join("ddwaf.h").to_str().unwrap())
-        .allowlist_item("^_?ddwaf_.+")
-        .blocklist_function("^ddwaf_init$") // This will eventually disappear from libddwaf
         .clang_arg(format!("-I{}", include_dir.to_str().unwrap()))
         .default_visibility(bindgen::FieldVisibilityKind::Public)
         .derive_default(true)
-        .prepend_enum_name(false);
+        .prepend_enum_name(false)
+        // Specifically allow-list supported/useful functions to avoid bloat.
+        .allowlist_function("^ddwaf_(get_version|set_log_cb)$")
+        .allowlist_function("^ddwaf_(destroy|known_(addresses|actions))$")
+        .allowlist_function("^ddwaf_(context_(init|destroy)|run)$")
+        .allowlist_function("^ddwaf_builder_(init|add_or_update_config|remove_config|build_instance|get_config_paths|destroy)$")
+        .allowlist_function(
+            "^ddwaf_object_(array|bool|float|free|from_json|invalid|map|null|signed|stringl|unsigned)$",
+        );
     let builder = if feature_dynamic {
+        let filename = download_dir.join(format!("{soname}.zst"));
+        let zstd_file = File::create(&filename).expect("failed to create zstd file");
+        let mut zstd = zstd::Encoder::new(zstd_file, 22).expect("failed to create zstd encoder");
+
+        let mut so = File::open(lib_dir.join(soname)).expect("failed to open shared object file");
+        io::copy(&mut so, &mut zstd).expect("failed to write compressed shared object file");
+        zstd.finish().expect("failed to finish zstd compression");
+
+        println!(
+            "cargo::rustc-env=LIBDDWAF_SHARED_OBJECT.zst={}",
+            filename.display()
+        );
+
         builder
             .dynamic_library_name("ddwaf")
             .dynamic_link_require_all(true)

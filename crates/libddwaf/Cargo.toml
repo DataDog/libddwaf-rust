@@ -17,7 +17,7 @@ serde = { version = "1.0", optional = true }
 serde_json = "1.0"
 
 [features]
-default = ["serde", "dynamic"]
+default = ["serde"]
 fips = ["libddwaf-sys/fips"]
 serde = ["dep:serde"]
 dynamic = ["libddwaf-sys/dynamic"]

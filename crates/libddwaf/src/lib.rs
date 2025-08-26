@@ -101,7 +101,7 @@ forward!(builder, config, context, handle);
 pub fn get_version() -> &'static CStr {
     let ptr = unsafe { libddwaf_sys::ddwaf_get_version() };
     if ptr.is_null() {
-        unsafe { CStr::from_ptr("".as_ptr().cast()) }
+        unsafe { CStr::from_ptr("\0".as_ptr().cast()) }
     } else {
         unsafe { CStr::from_ptr(ptr) }
     }
