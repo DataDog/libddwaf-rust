@@ -1,6 +1,6 @@
 FROM alpine:3.22.0
 
-RUN apk add --no-cache curl make build-base clang-libclang
+RUN apk add --no-cache curl make build-base clang-libclang musl-dev
 
 RUN curl https://sh.rustup.rs -sSf |                                            \
     sh -s -- --profile minimal                                                  \
