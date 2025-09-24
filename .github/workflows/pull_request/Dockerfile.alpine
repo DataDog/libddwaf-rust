@@ -1,6 +1,6 @@
 FROM alpine:3.22.0
 
-RUN apk add --no-cache curl make build-base clang-libclang musl-dev
+RUN apk add --no-cache curl make build-base clang clang-libclang musl-dev
 
 RUN curl https://sh.rustup.rs -sSf |                                            \
     sh -s -- --profile minimal                                                  \
@@ -15,6 +15,6 @@ RUN --mount=type=bind,source=.,target=/workspace/src,rw                         
     cd /workspace/src &&                                                        \
     if [ "$(uname -m)" = "x86_64" ]; then                                       \
         clang --print-libgcc-file-name &&                                       \
-        export RUSTFLAGS="-Cdefault-linker-libraries";                          \
+        export RUSTFLAGS="-Clinker=clang -Cdefault-linker-libraries";           \
     fi &&                                                                       \
     RUSTC_WRAPPER=/workspace/src/.cargo/musl.rustc-wrapper make test
