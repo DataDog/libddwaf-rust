@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+
+if [ "${CARGO_CRATE_NAME}" != 'build_script_build' ]; then
+    exec "$@"
+fi
+
+if [ "${CARGO_PKG_NAME}" != 'libddwaf-sys' ]; then
+    exec "$@"
+fi
+
+exec "$@" "-Ctarget-feature=-crt-static"

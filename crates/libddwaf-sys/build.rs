@@ -10,8 +10,17 @@ use reqwest::blocking::get;
 use tar::Archive;
 
 fn main() {
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+    if cfg!(target_env = "musl") && cfg!(target_feature = "crt-static") {
+        println!(
+            "cargo::warning=The crt-static target feature must be disabled when building on musl targets."
+        );
+        println!("cargo::warning=Consider using a RUSTC_WRAPPER script to fix this up.");
+    }
+
     if std::env::var("CARGO_FEATURE_FIPS").is_ok() {
-        println!("cargo:warning=FIPS feature is enabled, checking for forbidden dependencies...");
+        println!("cargo::warning=FIPS feature is enabled, checking for forbidden dependencies...");
 
         // List of dependencies that are not FIPS compliant
         let forbidden_dependencies = vec!["ring", "openssl", "boringssl"];
@@ -23,7 +32,7 @@ fn main() {
                 exit(-1);
             }
         }
-        println!("cargo:warning=All dependency checks passed. No forbidden dependencies found!");
+        println!("cargo::warning=All dependency checks passed. No forbidden dependencies found!");
     }
 
     // Ensure reqwest is able to use a crypto provider (no default is set so it's easier to maintain FIPS compliance)
@@ -38,7 +47,6 @@ fn main() {
     let target = env::var("TARGET").expect("TARGET environment variable not set");
 
     // Output directory
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let download_dir = out_dir.join("download").join(&target);
     let include_dir = download_dir.join("include");
     let lib_dir = download_dir.join("lib");
@@ -234,7 +242,7 @@ fn main() {
 
 /// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.
 fn check_forbidden_dependency(dependency_name: &str) -> Result<(), String> {
-    println!("cargo:warning=Checking for {dependency_name} dependency...");
+    println!("cargo::warning=Checking for {dependency_name} dependency...");
 
     // First run cargo tree to get dependency with detailed info
     let output = Command::new("cargo")
@@ -299,7 +307,7 @@ fn check_forbidden_dependency(dependency_name: &str) -> Result<(), String> {
         Err(error_msg)
     } else {
         println!(
-            "cargo:warning=No {dependency_name} dependency found. FIPS compliance check passed for this dependency!"
+            "cargo::warning=No {dependency_name} dependency found. FIPS compliance check passed for this dependency!"
         );
         Ok(())
     }
