@@ -28,7 +28,7 @@ fn main() {
         // Check each forbidden dependency
         for dependency in &forbidden_dependencies {
             if let Err(error_msg) = check_forbidden_dependency(dependency) {
-                println!("cargo:error={error_msg}");
+                println!("cargo::error={error_msg}");
                 exit(-1);
             }
         }
@@ -171,11 +171,11 @@ fn main() {
 
     // Add library search path and link directive
     println!(
-        "cargo:rustc-link-search=native={}",
+        "cargo::rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
     if !feature_dynamic {
-        println!("cargo:rustc-link-lib=static=ddwaf");
+        println!("cargo::rustc-link-lib=static=ddwaf");
     }
 
     // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a/.so.
@@ -185,14 +185,14 @@ fn main() {
     // if we want to disable this in final binaries, see maybe
     // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
     println!(
-        "cargo:rustc-link-arg=-Wl,-rpath,{}",
+        "cargo::rustc-link-arg=-Wl,-rpath,{}",
         lib_dir.to_str().unwrap()
     );
 
     #[cfg(target_os = "linux")]
-    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    println!("cargo::rustc-link-arg=-Wl,-rpath,$ORIGIN");
     #[cfg(target_os = "macos")]
-    println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path");
+    println!("cargo::rustc-link-arg=-Wl,-rpath,@loader_path");
 
     // Generate bindings with bindgen
     let builder = bindgen::Builder::default()
@@ -237,7 +237,7 @@ fn main() {
         .write_to_file(bindings_out_path)
         .expect("Failed to write bindings.rs");
 
-    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed=build.rs");
 }
 
 /// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.
