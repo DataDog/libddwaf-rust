@@ -10,8 +10,17 @@ use reqwest::blocking::get;
 use tar::Archive;
 
 fn main() {
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+    if cfg!(target_env = "musl") && cfg!(target_feature = "crt-static") {
+        println!(
+            "cargo::warning=The crt-static target feature must be disabled when building on musl targets."
+        );
+        println!("cargo::warning=Consider using a RUSTC_WRAPPER script to fix this up.");
+    }
+
     if std::env::var("CARGO_FEATURE_FIPS").is_ok() {
-        println!("cargo:warning=FIPS feature is enabled, checking for forbidden dependencies...");
+        println!("cargo::warning=FIPS feature is enabled, checking for forbidden dependencies...");
 
         // List of dependencies that are not FIPS compliant
         let forbidden_dependencies = vec!["ring", "openssl", "boringssl"];
@@ -19,11 +28,11 @@ fn main() {
         // Check each forbidden dependency
         for dependency in &forbidden_dependencies {
             if let Err(error_msg) = check_forbidden_dependency(dependency) {
-                println!("cargo:error={error_msg}");
+                println!("cargo::error={error_msg}");
                 exit(-1);
             }
         }
-        println!("cargo:warning=All dependency checks passed. No forbidden dependencies found!");
+        println!("cargo::warning=All dependency checks passed. No forbidden dependencies found!");
     }
 
     // Ensure reqwest is able to use a crypto provider (no default is set so it's easier to maintain FIPS compliance)
@@ -38,7 +47,6 @@ fn main() {
     let target = env::var("TARGET").expect("TARGET environment variable not set");
 
     // Output directory
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let download_dir = out_dir.join("download").join(&target);
     let include_dir = download_dir.join("include");
     let lib_dir = download_dir.join("lib");
@@ -163,11 +171,11 @@ fn main() {
 
     // Add library search path and link directive
     println!(
-        "cargo:rustc-link-search=native={}",
+        "cargo::rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
     if !feature_dynamic {
-        println!("cargo:rustc-link-lib=static=ddwaf");
+        println!("cargo::rustc-link-lib=static=ddwaf");
     }
 
     // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a/.so.
@@ -177,14 +185,14 @@ fn main() {
     // if we want to disable this in final binaries, see maybe
     // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
     println!(
-        "cargo:rustc-link-arg=-Wl,-rpath,{}",
+        "cargo::rustc-link-arg=-Wl,-rpath,{}",
         lib_dir.to_str().unwrap()
     );
 
     #[cfg(target_os = "linux")]
-    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    println!("cargo::rustc-link-arg=-Wl,-rpath,$ORIGIN");
     #[cfg(target_os = "macos")]
-    println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path");
+    println!("cargo::rustc-link-arg=-Wl,-rpath,@loader_path");
 
     // Generate bindings with bindgen
     let builder = bindgen::Builder::default()
@@ -229,12 +237,12 @@ fn main() {
         .write_to_file(bindings_out_path)
         .expect("Failed to write bindings.rs");
 
-    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed=build.rs");
 }
 
 /// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.
 fn check_forbidden_dependency(dependency_name: &str) -> Result<(), String> {
-    println!("cargo:warning=Checking for {dependency_name} dependency...");
+    println!("cargo::warning=Checking for {dependency_name} dependency...");
 
     // First run cargo tree to get dependency with detailed info
     let output = Command::new("cargo")
@@ -299,7 +307,7 @@ fn check_forbidden_dependency(dependency_name: &str) -> Result<(), String> {
         Err(error_msg)
     } else {
         println!(
-            "cargo:warning=No {dependency_name} dependency found. FIPS compliance check passed for this dependency!"
+            "cargo::warning=No {dependency_name} dependency found. FIPS compliance check passed for this dependency!"
         );
         Ok(())
     }
