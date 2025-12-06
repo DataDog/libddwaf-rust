@@ -1,3 +1,5 @@
+#![cfg(not(miri))]
+
 use libddwaf::{OBFUSCATOR_DEFAULT_KEY_REGEX, OBFUSCATOR_DEFAULT_VAL_REGEX, Obfuscator};
 
 #[test]

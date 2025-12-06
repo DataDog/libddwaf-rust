@@ -1,3 +1,5 @@
+#![cfg(not(miri))]
+
 use std::sync::LazyLock;
 
 use libddwaf::object::WafMap;

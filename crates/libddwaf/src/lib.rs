@@ -110,10 +110,11 @@ pub fn get_version() -> &'static CStr {
 
 #[cfg(test)]
 mod tests {
-    use crate::get_version;
-
     #[test]
+    #[cfg(not(miri))]
     fn test_get_version() {
+        use crate::get_version;
+
         if std::env::var("LIBDDWAF_PREFIX").is_ok() {
             eprintln!("Skipping test_get_version: LIBDDWAF_PREFIX is set");
             return;

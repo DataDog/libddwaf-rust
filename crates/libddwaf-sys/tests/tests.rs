@@ -1,3 +1,5 @@
+#![cfg(not(miri))]
+
 use std::ffi::{CStr, CString};
 
 use libddwaf_sys::*;

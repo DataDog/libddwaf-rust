@@ -1,9 +1,13 @@
-check: test clippy format_check
+check: test miri clippy format_check
 .PHONY: check
 
 test:
 	cargo test --all-targets
 .PHONY: test
+
+miri:
+	PATH="/home/glopes/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin:$$PATH" cargo miri test --lib --tests
+.PHONY: miri
 
 coverage:
 	cargo +nightly llvm-cov test --all-targets --branch --quiet --lcov --output-path=target/lcov.info \

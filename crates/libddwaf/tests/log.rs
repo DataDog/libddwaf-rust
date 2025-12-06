@@ -1,3 +1,5 @@
+#![cfg(not(miri))]
+
 use std::ffi::CStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

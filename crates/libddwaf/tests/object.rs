@@ -650,6 +650,7 @@ fn try_from_implementations() {
 }
 
 #[test]
+#[cfg(not(miri))]
 fn test_from_json() {
     assert_eq!(
         WafObject::from_json(
@@ -684,6 +685,7 @@ fn test_from_json() {
 }
 
 #[test]
+#[cfg(not(miri))] // takes too long
 fn test_array_from_large_slice_truncates() {
     const EXCESS_SIZE: usize = u16::MAX as usize + 1;
     let mut large_vec: Vec<WafObject> = (0..EXCESS_SIZE)
@@ -709,6 +711,7 @@ fn test_array_from_large_slice_truncates() {
 }
 
 #[test]
+#[cfg(not(miri))] // takes too long
 fn test_array_from_large_array_truncates() {
     const EXCESS_SIZE: usize = u16::MAX as usize + 1;
     std::thread::Builder::new()
@@ -726,6 +729,7 @@ fn test_array_from_large_array_truncates() {
 }
 
 #[test]
+#[cfg(not(miri))] // takes too long
 fn test_map_from_large_slice_truncates() {
     const EXCESS_SIZE: usize = u16::MAX as usize + 1;
     let mut large_vec: Vec<(WafObject, WafObject)> = (0..EXCESS_SIZE)
@@ -754,6 +758,7 @@ fn test_map_from_large_slice_truncates() {
 }
 
 #[test]
+#[cfg(not(miri))] // takes too long
 fn test_map_from_large_array_truncates() {
     const EXCESS_SIZE: usize = u16::MAX as usize + 1;
     std::thread::Builder::new()

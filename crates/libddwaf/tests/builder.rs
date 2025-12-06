@@ -1,3 +1,5 @@
+#![cfg(not(miri))]
+
 use libddwaf::{
     Builder, Config,
     object::{WafMap, WafOwned},
