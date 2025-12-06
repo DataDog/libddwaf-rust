@@ -28,10 +28,11 @@
 //!     waf_map,
 //!     Builder,
 //!     Config,
+//!     RunnableContext,
 //!     RunResult,
 //! };
 //!
-//! let mut builder = Builder::new(&Config::default())
+//! let mut builder = Builder::new(Some(&Config::default()))
 //!     .expect("Failed to build WAF instance");
 //! let rule_set = waf_map!{
 //!     /* Typically obtained by parsing a rules file using the serde feature */
@@ -60,7 +61,7 @@
 //! let data = waf_map!{
 //!     ("arg1", "value1"),
 //! };
-//! match waf_ctx.run(Some(data), None, std::time::Duration::from_millis(1)) {
+//! match waf_ctx.run(data, std::time::Duration::from_millis(1)) {
 //!     // Deal with the result as appropriate...
 //!     Ok(RunResult::Match(res)) => {
 //!         assert!(!res.timeout());
@@ -113,6 +114,11 @@ mod tests {
 
     #[test]
     fn test_get_version() {
+        if std::env::var("LIBDDWAF_PREFIX").is_ok() {
+            eprintln!("Skipping test_get_version: LIBDDWAF_PREFIX is set");
+            return;
+        }
+
         assert_eq!(
             env!("CARGO_PKG_VERSION"),
             get_version()

@@ -1,8 +1,8 @@
 use std::error;
 use std::fmt;
-use std::ptr::null_mut;
 use std::time::Duration;
 
+use crate::object::get_default_allocator;
 use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject, WafOwned};
 
 /// A WAF Context that can be used to evaluate the configured ruleset against address data.
@@ -11,73 +11,89 @@ use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject, WafOwned
 /// be used to handle data for a single request.
 pub struct Context {
     pub(crate) raw: libddwaf_sys::ddwaf_context,
-    pub(crate) keepalive: Vec<WafMap>,
 }
-impl Context {
+pub struct Subcontext {
+    pub(crate) raw: libddwaf_sys::ddwaf_subcontext,
+}
+pub trait RunnableContext {
     /// Evaluates the configured ruleset against the provided address data, and returns the result
     /// of this evaluation.
     ///
     /// # Errors
     /// Returns an error if the WAF encountered an internal error, invalid object, or invalid argument while processing
     /// the request.
-    pub fn run(
-        &mut self,
-        mut persistent_data: Option<WafMap>,
-        ephemeral_data: Option<&WafMap>,
-        timeout: Duration,
-    ) -> Result<RunResult, RunError> {
-        let mut res = std::mem::MaybeUninit::<RunOutput>::uninit();
-        let persistent_ref = persistent_data
-            .as_mut()
-            // The bindings take non-const pointers to the data, but actually does not change it.
-            .map_or(null_mut(), |f| unsafe {
-                std::ptr::from_mut(f.as_raw_mut()).cast()
-            });
-        let ephemeral_ref = ephemeral_data
-            .map(AsRef::<libddwaf_sys::ddwaf_object>::as_ref)
-            // The bindings take non-const pointers to the data, but actually does not change it.
-            .map_or(null_mut(), |r| std::ptr::from_ref(r).cast_mut());
+    fn run(&mut self, data: WafMap, timeout: Duration) -> Result<RunResult, RunError>;
+}
 
-        let status = unsafe {
-            libddwaf_sys::ddwaf_run(
-                self.raw,
-                persistent_ref,
-                ephemeral_ref,
-                res.as_mut_ptr().cast(),
-                timeout.as_micros().try_into().unwrap_or(u64::MAX),
-            )
-        };
-        match status {
-            libddwaf_sys::DDWAF_ERR_INTERNAL => {
-                // It's unclear whether the persistent data needs to be kept alive or not, so we
-                // keep it alive to be on the safe side.
-                if let Some(obj) = persistent_data {
-                    self.keepalive.push(obj);
-                }
-                Err(RunError::InternalError)
-            }
-            libddwaf_sys::DDWAF_ERR_INVALID_OBJECT => Err(RunError::InvalidObject),
-            libddwaf_sys::DDWAF_ERR_INVALID_ARGUMENT => Err(RunError::InvalidArgument),
-            libddwaf_sys::DDWAF_OK => {
-                // We need to keep the persistent data alive as the WAF may hold references to it.
-                if let Some(obj) = persistent_data {
-                    self.keepalive.push(obj);
-                }
-                Ok(RunResult::NoMatch(unsafe { res.assume_init() }))
-            }
-            libddwaf_sys::DDWAF_MATCH => {
-                // We need to keep the persistent data alive as the WAF may hold references to it.
-                if let Some(obj) = persistent_data {
-                    self.keepalive.push(obj);
-                }
-                Ok(RunResult::Match(unsafe { res.assume_init() }))
-            }
-            unknown => unreachable!(
-                "Unexpected value returned by {}: 0x{:02X}",
-                stringify!(libddwaf_sys::ddwaf_run),
-                unknown
-            ),
+type RunFunc<S> = unsafe extern "C" fn(
+    S,
+    *mut libddwaf_sys::ddwaf_object,
+    libddwaf_sys::ddwaf_allocator,
+    *mut libddwaf_sys::ddwaf_object,
+    u64,
+) -> libddwaf_sys::DDWAF_RET_CODE;
+
+fn run<S>(
+    raw_self: S,
+    func: RunFunc<S>,
+    mut data: WafMap,
+    timeout: Duration,
+) -> Result<RunResult, RunError> {
+    let mut res = std::mem::MaybeUninit::<RunOutput>::uninit();
+
+    let data_ptr = unsafe { data.as_raw_mut() };
+
+    let status = unsafe {
+        func(
+            raw_self,
+            data_ptr,
+            get_default_allocator().into(),
+            res.as_mut_ptr().cast(),
+            timeout.as_micros().try_into().unwrap_or(u64::MAX),
+        )
+    };
+    match status {
+        libddwaf_sys::DDWAF_ERR_INTERNAL => {
+            // It's unclear whether the persistent data needs to be kept alive or not, so we
+            // keep it alive to be on the safe side.
+            std::mem::forget(data);
+            Err(RunError::InternalError)
         }
+        libddwaf_sys::DDWAF_ERR_INVALID_OBJECT => Err(RunError::InvalidObject),
+        libddwaf_sys::DDWAF_ERR_INVALID_ARGUMENT => Err(RunError::InvalidArgument),
+        libddwaf_sys::DDWAF_OK => {
+            // We need to keep the persistent data alive (now owned by the WAF)
+            std::mem::forget(data);
+            Ok(RunResult::NoMatch(unsafe { res.assume_init() }))
+        }
+        libddwaf_sys::DDWAF_MATCH => {
+            // We need to keep the persistent data alive (now owned by the WAF)
+            std::mem::forget(data);
+            Ok(RunResult::Match(unsafe { res.assume_init() }))
+        }
+        unknown => unreachable!(
+            "Unexpected value returned by {}: 0x{:02X}",
+            stringify!(libddwaf_sys::ddwaf_run),
+            unknown
+        ),
+    }
+}
+impl RunnableContext for Context {
+    fn run(&mut self, data: WafMap, timeout: Duration) -> Result<RunResult, RunError> {
+        run(self.raw, libddwaf_sys::ddwaf_context_eval, data, timeout)
+    }
+}
+impl Context {
+    #[must_use]
+    pub fn create_subcontext(&self) -> Subcontext {
+        Subcontext {
+            raw: unsafe { libddwaf_sys::ddwaf_subcontext_init(self.raw) },
+        }
+    }
+}
+impl RunnableContext for Subcontext {
+    fn run(&mut self, data: WafMap, timeout: Duration) -> Result<RunResult, RunError> {
+        run(self.raw, libddwaf_sys::ddwaf_subcontext_eval, data, timeout)
     }
 }
 impl Drop for Context {
@@ -85,11 +101,25 @@ impl Drop for Context {
         unsafe { libddwaf_sys::ddwaf_context_destroy(self.raw) }
     }
 }
-// Safety: Operations that mutate the internal state are made safe by requiring a mutable borrow on
-// the [Context] instance; and none of the internal state is exposed in any way.
+impl Drop for Subcontext {
+    fn drop(&mut self) {
+        unsafe { libddwaf_sys::ddwaf_subcontext_destroy(self.raw) }
+    }
+}
+
+/// Safety: [`Context`] is [`Send`] because it doesn't depend on thread local
+/// data and its pointer is not leaked or otherwise shared with other owning
+/// instances.
 unsafe impl Send for Context {}
-// Safety: [Context] is trivially [Sync] because it contains no methods allowing shared references.
+/// Safety: [`Context`] is [`Sync`] because having a shared reference does not
+/// allow for changing state (except for atomically increasing reference count
+/// of some elements in the context, like that of the context store)
 unsafe impl Sync for Context {}
+
+/// Safety: The same considerations apply to [`Subcontext`] as to [`Context`].
+unsafe impl Send for Subcontext {}
+/// Safety: The only method available takes an exclusive borrow.
+unsafe impl Sync for Subcontext {}
 
 /// The result of the [`Context::run`] operation.
 #[derive(Debug)]
@@ -135,7 +165,7 @@ impl RunOutput {
     pub fn timeout(&self) -> bool {
         debug_assert!(self.data.is_valid());
         self.data
-            .get(b"timeout")
+            .get_bstr(b"timeout")
             .and_then(|o| o.to_bool())
             .unwrap_or_default()
     }
@@ -146,7 +176,7 @@ impl RunOutput {
     pub fn keep(&self) -> bool {
         debug_assert!(self.data.is_valid());
         self.data
-            .get(b"keep")
+            .get_bstr(b"keep")
             .and_then(|o| o.to_bool())
             .unwrap_or_default()
     }
@@ -156,7 +186,7 @@ impl RunOutput {
     pub fn duration(&self) -> Duration {
         debug_assert!(self.data.is_valid());
         self.data
-            .get(b"duration")
+            .get_bstr(b"duration")
             .and_then(|o| o.to_u64())
             .map(Duration::from_nanos)
             .unwrap_or_default()
@@ -168,7 +198,7 @@ impl RunOutput {
     pub fn events(&self) -> Option<&Keyed<WafArray>> {
         debug_assert!(self.data.is_valid());
         self.data
-            .get(b"events")
+            .get_bstr(b"events")
             .and_then(Keyed::<WafObject>::as_type)
     }
 
@@ -178,7 +208,7 @@ impl RunOutput {
     pub fn actions(&self) -> Option<&Keyed<WafMap>> {
         debug_assert!(self.data.is_valid());
         self.data
-            .get(b"actions")
+            .get_bstr(b"actions")
             .and_then(Keyed::<WafObject>::as_type)
     }
 
@@ -187,7 +217,7 @@ impl RunOutput {
     pub fn attributes(&self) -> Option<&Keyed<WafMap>> {
         debug_assert!(self.data.is_valid());
         self.data
-            .get(b"attributes")
+            .get_bstr(b"attributes")
             .and_then(Keyed::<WafObject>::as_type)
     }
 }

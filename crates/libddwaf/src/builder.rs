@@ -13,16 +13,28 @@ pub struct Builder {
     raw: libddwaf_sys::ddwaf_builder,
 }
 impl Builder {
+    const OBFUSCATOR_KEY: &str = "datadog/0/ASM_DD/0/config";
+
     /// Creates a new [`Builder`] instance using the provided [`Config`]. Returns [`None`] if the
     /// builder's initialization fails.
     #[must_use]
-    pub fn new(config: &Config) -> Option<Self> {
-        let builder = Builder {
-            raw: unsafe { libddwaf_sys::ddwaf_builder_init(&raw const config.raw) },
+    pub fn new(config: Option<&Config>) -> Option<Self> {
+        let mut builder = Builder {
+            raw: unsafe { libddwaf_sys::ddwaf_builder_init() },
         };
         if builder.raw.is_null() {
             return None;
         }
+
+        if let Some(config) = config {
+            let config_obj = config.as_waf_object();
+            let res = builder.add_or_update_config(Self::OBFUSCATOR_KEY, &config_obj, None);
+            if !res {
+                debug_assert!(false, "Failed to add or update obfuscator config");
+                return None;
+            }
+        }
+
         Some(builder)
     }
 

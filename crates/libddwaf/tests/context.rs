@@ -7,13 +7,10 @@
 )]
 
 use std::sync::LazyLock;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use libddwaf::{
-    Builder, Config, RunResult,
+    Builder, Config, RunResult, RunnableContext,
     object::{WafArray, WafMap, WafObject, WafOwned},
     waf_array, waf_map,
 };
@@ -51,7 +48,7 @@ static ARACHNI_RULE: LazyLock<WafMap> = LazyLock::new(|| {
 
 #[test]
 fn basic_run_rule_with_match() {
-    let mut builder = Builder::new(&Config::default()).expect("Failed to create builder");
+    let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
     let mut diagnostics = WafOwned::<WafMap>::default();
     assert!(builder.add_or_update_config(
         "rules",
@@ -81,7 +78,7 @@ fn basic_run_rule_with_match() {
     let mut data = WafMap::new(1);
     data[0] = ("server.request.headers.no_cookies", header).into();
 
-    let res = ctx.run(Some(data), None, Duration::from_secs(1));
+    let res = ctx.run(data, Duration::from_secs(1));
 
     match res {
         Ok(RunResult::Match(result)) => {
@@ -100,7 +97,7 @@ fn basic_run_rule_with_match() {
 
             let actions = result.actions().expect("Expected some actions");
             assert_eq!(actions.len(), 1);
-            assert!(actions.get(b"block_request").is_some(),);
+            assert!(actions.get_bstr(b"block_request").is_some(),);
         }
         _ => {
             panic!("Unexpected result: {res:?}");
@@ -110,7 +107,7 @@ fn basic_run_rule_with_match() {
 
 #[test]
 fn basic_run_rule_with_no_match() {
-    let mut builder = Builder::new(&Config::default()).expect("Failed to create builder");
+    let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
     let mut diagnostics = WafOwned::<WafMap>::default();
     assert!(builder.add_or_update_config(
         "rules",
@@ -140,7 +137,7 @@ fn basic_run_rule_with_no_match() {
     let mut data = WafMap::new(1);
     data[0] = ("server.request.headers.no_cookies", header).into();
 
-    let res = ctx.run(Some(data), None, Duration::from_secs(1));
+    let res = ctx.run(data, Duration::from_secs(1));
 
     match res {
         Ok(RunResult::NoMatch(result)) => {
@@ -166,7 +163,7 @@ fn basic_run_rule_with_no_match() {
 
 #[test]
 fn run_rule_threaded() {
-    let mut builder = Builder::new(&Config::default()).expect("Failed to create builder");
+    let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
     assert!(builder.add_or_update_config("rules", LazyLock::force(&ARACHNI_RULE), None));
     let waf = Arc::new(builder.build().unwrap());
 
@@ -178,24 +175,26 @@ fn run_rule_threaded() {
         Into::<WafObject>::into(header),
     )
         .into();
-    let adata = Arc::new(data);
 
     let t: Vec<_> = (0..2)
         .map(|_| {
-            let data = adata.clone();
             let waf = waf.clone();
+            let data = data.clone();
             std::thread::spawn(move || {
-                let ctx = Arc::new(Mutex::new(waf.new_context()));
+                let ctx = Arc::new(waf.new_context());
 
                 (0..2)
                     .map(|_| {
+                        let ctx = ctx.clone();
                         let data = data.clone();
-                        let ctx = Arc::clone(&ctx);
                         std::thread::spawn(move || {
-                            let mut ctx = ctx.lock().unwrap();
+                            let mut subctx = (*ctx).create_subcontext();
 
-                            let res = ctx.run(None, Some(&data), Duration::from_secs(1));
+                            let res = subctx.run(data, Duration::from_secs(1));
 
+                            if !matches!(res, Ok(RunResult::Match(_))) {
+                                eprintln!("Unexpected result: {res:?}");
+                            }
                             assert!(matches!(res, Ok(RunResult::Match(_))));
                         })
                     })
@@ -207,4 +206,49 @@ fn run_rule_threaded() {
         .collect();
 
     t.into_iter().for_each(|t| t.join().unwrap());
+}
+
+#[test]
+fn test_run_error_display() {
+    use libddwaf::RunError;
+
+    assert_eq!(
+        format!("{}", RunError::InternalError),
+        "The WAF encountered an internal error"
+    );
+    assert_eq!(
+        format!("{}", RunError::InvalidObject),
+        "The WAF encountered an invalid object"
+    );
+    assert_eq!(
+        format!("{}", RunError::InvalidArgument),
+        "The WAF encountered an invalid argument"
+    );
+}
+
+#[test]
+fn test_run_output_debug() {
+    let mut builder = Builder::new(Some(&Config::default())).expect("builder should be created");
+    let mut diagnostics = WafOwned::<WafMap>::default();
+    assert!(builder.add_or_update_config("test", &*ARACHNI_RULE, Some(&mut diagnostics)));
+    let waf = builder.build().expect("waf should be created");
+
+    let mut ctx = waf.new_context();
+    let data = waf_map! {
+        ("server.request.headers.no_cookies", waf_map!{
+            ("user-agent", "Arachni"),
+        }),
+    };
+
+    match ctx.run(data, Duration::from_secs(1)) {
+        Ok(RunResult::Match(output)) => {
+            // Test that Debug formatting works
+            let debug_str = format!("{:?}", output);
+            assert!(debug_str.contains("RunOutput"));
+            assert!(debug_str.contains("timeout"));
+            assert!(debug_str.contains("keep"));
+            assert!(debug_str.contains("duration"));
+        }
+        other => panic!("Expected match result, got: {:?}", other),
+    }
 }

@@ -6,7 +6,7 @@ use libddwaf::{
 
 #[test]
 pub fn blank_config() {
-    let mut builder = Builder::new(&Config::default()).expect("builder should be created");
+    let mut builder = Builder::new(Some(&Config::default())).expect("builder should be created");
     // Not adding any rules, so we can't get a handle...
     assert!(builder.build().is_none());
 }
@@ -19,13 +19,13 @@ pub fn blank_config() {
     )
 )]
 pub fn empty_path() {
-    let mut builder = Builder::new(&Config::default()).expect("builder should be created");
+    let mut builder = Builder::new(Some(&Config::default())).expect("builder should be created");
     assert!(!builder.add_or_update_config("", &waf_map! {}, None)); // Panics when debug_assertions is enabled
 }
 
 #[test]
 pub fn add_update_remove_config() {
-    let mut builder = Builder::new(&Config::default()).expect("builder should be created");
+    let mut builder = Builder::new(None).expect("builder should be created");
 
     let rules_1 = waf_map! {
         ("version", "2.1"),
@@ -84,7 +84,9 @@ pub fn add_update_remove_config() {
     assert!(builder.add_or_update_config("test", &rules_1, Some(&mut diagnostics)));
     assert!(diagnostics.is_valid());
     assert_eq!(
-        diagnostics.get(b"ruleset_version").and_then(|o| o.to_str()),
+        diagnostics
+            .get_bstr(b"ruleset_version")
+            .and_then(|o| o.to_str()),
         Some("1"),
     );
     assert_eq!(builder.config_paths_count(None), 1);
@@ -95,7 +97,9 @@ pub fn add_update_remove_config() {
     assert!(builder.add_or_update_config("test", &rules_2, Some(&mut diagnostics)));
     assert!(diagnostics.is_valid());
     assert_eq!(
-        diagnostics.get(b"ruleset_version").and_then(|o| o.to_str()),
+        diagnostics
+            .get_bstr(b"ruleset_version")
+            .and_then(|o| o.to_str()),
         Some("2"),
     );
     assert_eq!(builder.config_paths_count(None), 1);

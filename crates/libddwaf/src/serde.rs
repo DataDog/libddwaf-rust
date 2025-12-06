@@ -1,8 +1,6 @@
 //! Implementations of [`serde::Deserialize`] for [`object::WafObject`](crate::object::WafObject) and
 //! [`object::WafMap`](crate::object::WafMap).
 
-use std::borrow::Cow;
-
 use serde::{
     Deserializer,
     de::Error,
@@ -10,7 +8,7 @@ use serde::{
 };
 
 use crate::object::{
-    WafArray, WafBool, WafFloat, WafMap, WafObject, WafObjectType, WafSigned, WafString,
+    Keyed, WafArray, WafBool, WafFloat, WafMap, WafObject, WafObjectType, WafSigned, WafString,
     WafUnsigned,
 };
 
@@ -84,7 +82,7 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
     where
         E: Error,
     {
-        Ok(WafObject::from(WafString::new(v)))
+        Ok(WafObject::from(WafString::from(v)))
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
@@ -106,15 +104,14 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
     where
         A: serde::de::MapAccess<'de>,
     {
-        let mut vec: Vec<(Cow<'de, str>, WafObject)> =
+        let mut vec: Vec<(WafObject, WafObject)> =
             map.size_hint().map(Vec::with_capacity).unwrap_or_default();
-        while let Some((key, value)) = map.next_entry::<Cow<'de, str>, WafObject>()? {
+        while let Some((key, value)) = map.next_entry::<WafObject, WafObject>()? {
             vec.push((key, value));
         }
-        let mut res = WafMap::new(vec.len().try_into().unwrap());
+        let mut res = WafMap::new(vec.len().try_into().map_err(A::Error::custom)?);
         for (i, (k, v)) in vec.into_iter().enumerate() {
-            let key_str: &str = &k;
-            res[i] = (key_str, v).into();
+            res[i] = Keyed::new(k, v);
         }
         Ok(res.into())
     }
@@ -193,7 +190,7 @@ impl serde::Serialize for WafString {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&String::from_utf8_lossy(self.bytes()))
+        serializer.serialize_str(&String::from_utf8_lossy(self.as_bytes()))
     }
 }
 
@@ -202,7 +199,7 @@ impl serde::Serialize for WafArray {
     where
         S: serde::Serializer,
     {
-        let mut seq_serializer = serializer.serialize_seq(Some(self.len()))?;
+        let mut seq_serializer = serializer.serialize_seq(Some(self.len() as usize))?;
         for value in self.iter() {
             seq_serializer.serialize_element(value)?;
         }
@@ -215,10 +212,11 @@ impl serde::Serialize for WafMap {
     where
         S: serde::Serializer,
     {
-        let mut map_serializer = serializer.serialize_map(Some(self.len()))?;
+        let mut map_serializer = serializer.serialize_map(Some(self.len() as usize))?;
         for keyed_val in self.iter() {
-            map_serializer
-                .serialize_entry(&String::from_utf8_lossy(keyed_val.key()), keyed_val.inner())?;
+            // Key is serialized as WafObject; formats requiring string keys (e.g. JSON)
+            // will error if the key is not a WafString
+            map_serializer.serialize_entry(keyed_val.key(), keyed_val.value())?;
         }
         map_serializer.end()
     }

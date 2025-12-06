@@ -24,27 +24,6 @@ unsafe impl Sync for ddwaf_object {}
 
 #[warn(clippy::pedantic)]
 impl ddwaf_object {
-    /// Drops the key associated with the receiving [`ddwaf_object`].
-    ///
-    /// # Safety
-    /// The key, if present, must be a raw-converted [`Box<[u8]>`]. After this method returns, the
-    /// values of [`ddwaf_object::parameterName`] and [`ddwaf_object::parameterNameLength`] must be
-    /// replaced as they will no longer be valid.
-    ///
-    /// # Panics
-    /// If the key is too large for this platform (can only happens on 32-bit platforms).
-    pub unsafe fn drop_key(&mut self) {
-        if self.parameterName.is_null() {
-            return;
-        }
-        let len =
-            usize::try_from(self.parameterNameLength).expect("key is too large for this platform");
-        let slice: &mut [u8] = unsafe {
-            std::slice::from_raw_parts_mut(self.parameterName.cast::<u8>().cast_mut(), len)
-        };
-        drop(unsafe { Box::from_raw(std::ptr::from_mut(slice)) });
-    }
-
     /// Drops the array data associated with the receiving [`ddwaf_object`].
     ///
     /// # Safety
@@ -52,23 +31,20 @@ impl ddwaf_object {
     /// - The array must be an [`std::alloc::alloc`]ated array of [`ddwaf_object`] of the proper size.
     /// - The individual elements of the array must be valid [`ddwaf_object`]s that can be dropped
     ///   with [`ddwaf_object::drop_object`].
-    ///
-    /// # Panics
-    /// If the array is too large for this platform (can only happens on 32-bit platforms).
+    #[allow(clippy::missing_panics_doc)]
     pub unsafe fn drop_array(&mut self) {
-        debug_assert_eq!(self.type_, DDWAF_OBJ_ARRAY);
-        if self.nbEntries == 0 {
+        debug_assert_eq!(self.obj_type(), DDWAF_OBJ_ARRAY);
+        let array = unsafe { self.via.array };
+        if array.capacity == 0 {
             return;
         }
-        let array = unsafe { self.__bindgen_anon_1.array };
-        let len = isize::try_from(self.nbEntries).expect("array is too large for this platform");
-        for i in 0..len {
-            let elem = unsafe { &mut *array.offset(i) };
+        for i in 0..array.size {
+            #[allow(clippy::cast_possible_wrap)]
+            let elem = unsafe { &mut *array.ptr.offset(i as isize) };
             unsafe { elem.drop_object() };
         }
-        #[allow(clippy::cast_possible_truncation)] // We could cast to isize, and usize is wider.
-        let layout = Layout::array::<ddwaf_object>(self.nbEntries as usize).unwrap();
-        unsafe { std::alloc::dealloc(array.cast(), layout) };
+        let layout = Layout::array::<ddwaf_object>(array.capacity as usize).unwrap();
+        unsafe { std::alloc::dealloc(array.ptr.cast(), layout) };
     }
 
     /// Drops the map data associated with the receiving [`ddwaf_object`].
@@ -78,24 +54,21 @@ impl ddwaf_object {
     /// - The map must be an [`std::alloc::alloc`]ated array of [`ddwaf_object`] of the proper size.
     /// - The individual elements of the map must be valid [`ddwaf_object`]s that can be dropped with
     ///   both [`ddwaf_object::drop_object`] and [`ddwaf_object::drop_key`].
-    ///
-    /// # Panics
-    /// If the map is too large for this platform (can only happens on 32-bit platforms).
+    #[allow(clippy::missing_panics_doc)]
     pub unsafe fn drop_map(&mut self) {
-        debug_assert_eq!(self.type_, DDWAF_OBJ_MAP);
-        if self.nbEntries == 0 {
+        debug_assert_eq!(self.obj_type(), DDWAF_OBJ_MAP);
+        let map = unsafe { self.via.map };
+        if map.capacity == 0 {
             return;
         }
-        let array = unsafe { self.__bindgen_anon_1.array };
-        let len = isize::try_from(self.nbEntries).expect("map is too large for this platform");
-        for i in 0..len {
-            let elem = unsafe { &mut *array.offset(i) };
-            unsafe { elem.drop_key() };
-            unsafe { elem.drop_object() };
+        for i in 0..map.size {
+            #[allow(clippy::cast_possible_wrap)]
+            let elem = unsafe { &mut *map.ptr.offset(i as isize) };
+            unsafe { elem.key.drop_object() };
+            unsafe { elem.val.drop_object() };
         }
-        #[allow(clippy::cast_possible_truncation)] // We could cast to isize, and usize is wider.
-        let layout = Layout::array::<ddwaf_object>(self.nbEntries as usize).unwrap();
-        unsafe { std::alloc::dealloc(array.cast(), layout) };
+        let layout = Layout::array::<_ddwaf_object_kv>(map.capacity as usize).unwrap();
+        unsafe { std::alloc::dealloc(map.ptr.cast(), layout) };
     }
 
     /// Drops the value associated with the receiving [`ddwaf_object`].
@@ -104,8 +77,9 @@ impl ddwaf_object {
     /// If the [`ddwaf_object`] is a string, array, or map, the respective requirements of the
     /// [`ddwaf_object::drop_string`], [`ddwaf_object::drop_array`], or [`ddwaf_object::drop_map`]
     /// methods apply.
+    /// The method can't be called more than once.
     pub unsafe fn drop_object(&mut self) {
-        match self.type_ {
+        match self.obj_type() {
             DDWAF_OBJ_STRING => unsafe { self.drop_string() },
             DDWAF_OBJ_ARRAY => unsafe { self.drop_array() },
             DDWAF_OBJ_MAP => unsafe { self.drop_map() },
@@ -113,102 +87,115 @@ impl ddwaf_object {
         }
     }
 
-    /// Drops the string associated with the receiving [`ddwaf_object`].
+    /// Drops the regular string associated with the receiving [`ddwaf_object`].
     ///
     /// # Safety
     /// - The [`ddwaf_object`] must be a valid representation of a string
-    /// - The [`ddwaf_object::__bindgen_anon_1`] field must have a
-    ///   [`_ddwaf_object__bindgen_ty_1::stringValue`] set from a raw-converted [`Box<[u8]>`]
-    ///
-    /// # Panics
-    /// If the string is too large for this platform (can only happens on 32-bit platforms).
+    /// - The [`_ddwaf_object__bindgen_ty_1::str_`] field must have a
+    ///   [`_ddwaf_object_string::ptr`] set from an allocation of `c_char` of the
+    ///   size indicated by the [`_ddwaf_object_string::size`] field done with [`std::alloc::alloc`].
+    #[allow(clippy::missing_panics_doc)]
     pub unsafe fn drop_string(&mut self) {
-        debug_assert_eq!(self.type_, DDWAF_OBJ_STRING);
-        let sval = unsafe { self.__bindgen_anon_1.stringValue };
+        debug_assert_eq!(self.obj_type(), DDWAF_OBJ_STRING);
+        let sval = unsafe { self.via.str_.ptr };
         if sval.is_null() {
             return;
         }
-        let len = usize::try_from(self.nbEntries).expect("string is too large for this platform");
-        let slice: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(sval as *mut _, len) };
-        drop(unsafe { Box::from_raw(slice) });
+        unsafe {
+            std::alloc::dealloc(
+                sval.cast(),
+                Layout::array::<::std::os::raw::c_char>(self.via.str_.size as usize).unwrap(),
+            );
+        }
+    }
+
+    /// Returns the type of the [`ddwaf_object`]
+    #[must_use]
+    pub fn obj_type(&self) -> DDWAF_OBJ_TYPE {
+        DDWAF_OBJ_TYPE::from(unsafe { self.type_ })
+    }
+
+    /// Returns true if the [`ddwaf_object`] is a string.
+    #[must_use]
+    pub fn is_string(&self) -> bool {
+        (self.obj_type() & DDWAF_OBJ_STRING) != 0
+    }
+
+    /// Returns a slice of the bytes from the string associated with the receiving [`ddwaf_object`].
+    ///
+    /// # Safety
+    /// - The [`ddwaf_object`] must be a valid representation of a string.
+    unsafe fn string_vec(&self) -> &[u8] {
+        debug_assert!(self.is_string());
+
+        if self.obj_type() == DDWAF_OBJ_STRING || self.obj_type() == DDWAF_OBJ_LITERAL_STRING {
+            let str = unsafe { self.via.str_ };
+            if str.size == 0 {
+                return &[];
+            }
+            unsafe { slice::from_raw_parts(str.ptr.cast(), str.size as usize) }
+        } else {
+            let sstr = unsafe { &self.via.sstr };
+            let data = &sstr.data[..sstr.size as usize];
+            // reinterpret &[i8] as &[u8]
+            unsafe { std::slice::from_raw_parts(data.as_ptr().cast(), data.len()) }
+        }
     }
 }
+
 impl std::cmp::PartialEq<ddwaf_object> for ddwaf_object {
     fn eq(&self, other: &ddwaf_object) -> bool {
-        if self.type_ != other.type_ {
+        if self.is_string() && other.is_string() {
+            let left = unsafe { self.string_vec() };
+            let right = unsafe { other.string_vec() };
+            return left == right;
+        }
+
+        if unsafe { self.type_ != other.type_ } {
             return false;
         }
-        match self.type_ {
+        match self.obj_type() {
             DDWAF_OBJ_INVALID | DDWAF_OBJ_NULL => true,
-            DDWAF_OBJ_SIGNED => unsafe {
-                self.__bindgen_anon_1.intValue == other.__bindgen_anon_1.intValue
-            },
-            DDWAF_OBJ_UNSIGNED => unsafe {
-                self.__bindgen_anon_1.uintValue == other.__bindgen_anon_1.uintValue
-            },
-            DDWAF_OBJ_BOOL => unsafe {
-                self.__bindgen_anon_1.boolean == other.__bindgen_anon_1.boolean
-            },
-            DDWAF_OBJ_FLOAT => unsafe {
-                // We do an exact comparison here, which ought to be okay as we normally don't do math here...
-                self.__bindgen_anon_1.f64_ == other.__bindgen_anon_1.f64_
-            },
-
-            // Strings are a pointer, we need to compare the data they point to...
-            DDWAF_OBJ_STRING => unsafe {
-                if self.nbEntries != other.nbEntries {
+            DDWAF_OBJ_SIGNED => unsafe { self.via.i64_.val == other.via.i64_.val },
+            DDWAF_OBJ_UNSIGNED => unsafe { self.via.u64_.val == other.via.u64_.val },
+            DDWAF_OBJ_BOOL => unsafe { self.via.b8.val == other.via.b8.val },
+            DDWAF_OBJ_FLOAT => unsafe { self.via.f64_.val == other.via.f64_.val },
+            DDWAF_OBJ_ARRAY => {
+                let left = unsafe { self.via.array };
+                let right = unsafe { other.via.array };
+                if left.size != right.size {
                     return false;
                 }
-                if self.nbEntries == 0 {
+                if left.size == 0 {
                     return true;
                 }
-                let len =
-                    usize::try_from(self.nbEntries).expect("string is too large for this platform");
-                let left = slice::from_raw_parts(self.__bindgen_anon_1.stringValue, len);
-                let right = slice::from_raw_parts(other.__bindgen_anon_1.stringValue, len);
-                left == right
-            },
-
-            // Arrays and maps are pointers to collections, we need to compare the data they point to...
-            DDWAF_OBJ_ARRAY | DDWAF_OBJ_MAP => unsafe {
-                if self.nbEntries != other.nbEntries {
-                    return false;
-                }
-                if self.nbEntries == 0 {
-                    return true;
-                }
-
-                let left = slice::from_raw_parts(
-                    self.__bindgen_anon_1.array,
-                    usize::try_from(self.nbEntries)
-                        .expect("array/map is too large for this platform"),
-                );
-                let right = slice::from_raw_parts(
-                    other.__bindgen_anon_1.array,
-                    usize::try_from(other.nbEntries)
-                        .expect("array/map is too large for this platform"),
-                );
-                for (left, right) in left.iter().zip(right.iter()) {
-                    if self.type_ == DDWAF_OBJ_MAP {
-                        if left.parameterNameLength != right.parameterNameLength {
-                            return false;
-                        }
-                        let len = usize::try_from(left.parameterNameLength)
-                            .expect("key is too large for this platform");
-                        if len > 0 {
-                            let left_key = slice::from_raw_parts(left.parameterName, len);
-                            let right_key = slice::from_raw_parts(right.parameterName, len);
-                            if left_key != right_key {
-                                return false;
-                            }
-                        }
-                    }
+                for i in 0..left.size {
+                    let left = unsafe { &*left.ptr.offset(i as isize) };
+                    let right = unsafe { &*right.ptr.offset(i as isize) };
                     if left != right {
                         return false;
                     }
                 }
                 true
-            },
+            }
+            DDWAF_OBJ_MAP => {
+                let left = unsafe { self.via.map };
+                let right = unsafe { other.via.map };
+                if left.size != right.size {
+                    return false;
+                }
+                if left.size == 0 {
+                    return true;
+                }
+                for i in 0..left.size {
+                    let left = unsafe { &*left.ptr.offset(i as isize) };
+                    let right = unsafe { &*right.ptr.offset(i as isize) };
+                    if left.key != right.key || left.val != right.val {
+                        return false;
+                    }
+                }
+                true
+            }
 
             _ => false,
         }
@@ -217,62 +204,51 @@ impl std::cmp::PartialEq<ddwaf_object> for ddwaf_object {
 impl std::fmt::Debug for ddwaf_object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut dbg = f.debug_struct("ddwaf_object");
-        let dbg = match usize::try_from(self.parameterNameLength) {
-            Ok(0) => &mut dbg,
-            Ok(len) => {
-                let key = unsafe { slice::from_raw_parts(self.parameterName.cast(), len) };
-                let key = String::from_utf8_lossy(key);
-                dbg.field("parameterName", &key)
-            }
-            Err(_) => {
-                let key = unsafe { slice::from_raw_parts(self.parameterName.cast(), usize::MAX) };
-                let key = String::from_utf8_lossy(key);
-                dbg.field("parameterName(trunc)", &key)
-            }
-        };
-        let dbg = match self.type_ {
+        match self.obj_type() {
             DDWAF_OBJ_BOOL => dbg
                 .field("type", &stringify!(DDWAF_OBJ_BOOL))
-                .field("boolean", unsafe { &self.__bindgen_anon_1.boolean }),
+                .field("boolean", unsafe { &self.via.b8.val }),
             DDWAF_OBJ_FLOAT => dbg
                 .field("type", &stringify!(DDWAF_OBJ_FLOAT))
-                .field("f64", unsafe { &self.__bindgen_anon_1.f64_ }),
+                .field("f64", unsafe { &self.via.f64_.val }),
             DDWAF_OBJ_SIGNED => dbg
                 .field("type", &stringify!(DDWAF_OBJ_SIGNED))
-                .field("int", unsafe { &self.__bindgen_anon_1.intValue }),
+                .field("int", unsafe { &self.via.i64_.val }),
             DDWAF_OBJ_UNSIGNED => dbg
                 .field("type", &stringify!(DDWAF_OBJ_UNSIGNED))
-                .field("uint", unsafe { &self.__bindgen_anon_1.uintValue }),
-            DDWAF_OBJ_STRING => {
-                let (field, len) = match usize::try_from(self.nbEntries) {
-                    Ok(len) => ("string", len),
-                    Err(_) => ("string(trunc)", usize::MAX),
-                };
-                let sval =
-                    unsafe { slice::from_raw_parts(self.__bindgen_anon_1.stringValue.cast(), len) };
+                .field("uint", unsafe { &self.via.u64_.val }),
+            DDWAF_OBJ_STRING | DDWAF_OBJ_LITERAL_STRING => {
+                let sval = unsafe { self.string_vec() };
                 let sval = String::from_utf8_lossy(sval);
-                dbg.field("type", &stringify!(DDWAF_OBJ_STRING))
-                    .field(field, &sval)
+                dbg.field(
+                    "type",
+                    if self.obj_type() == DDWAF_OBJ_STRING {
+                        &stringify!(DDWAF_OBJ_STRING)
+                    } else {
+                        &stringify!(DDWAF_OBJ_LITERAL_STRING)
+                    },
+                )
+                .field("string", &sval)
+            }
+            DDWAF_OBJ_SMALL_STRING => {
+                let sval = unsafe { self.string_vec() };
+                let sval = String::from_utf8_lossy(sval);
+                dbg.field("type", &stringify!(DDWAF_OBJ_SMALL_STRING))
+                    .field("string", &sval)
             }
             DDWAF_OBJ_ARRAY => {
-                let (field, len) = match usize::try_from(self.nbEntries) {
-                    Ok(len) => ("array", len),
-                    Err(_) => ("array(trunc)", usize::MAX),
-                };
+                let array = unsafe { self.via.array };
                 let array: &[ddwaf_object] =
-                    unsafe { slice::from_raw_parts(self.__bindgen_anon_1.array.cast(), len) };
+                    unsafe { slice::from_raw_parts(array.ptr.cast(), array.size as usize) };
                 dbg.field("type", &stringify!(DDWAF_OBJ_ARRAY))
-                    .field(field, &array)
+                    .field("array", &array)
             }
             DDWAF_OBJ_MAP => {
-                let (field, len) = match usize::try_from(self.nbEntries) {
-                    Ok(len) => ("map", len),
-                    Err(_) => ("map(trunc)", usize::MAX),
-                };
-                let array: &[ddwaf_object] =
-                    unsafe { slice::from_raw_parts(self.__bindgen_anon_1.array.cast(), len) };
+                let map = unsafe { self.via.map };
+                let map: &[_ddwaf_object_kv] =
+                    unsafe { slice::from_raw_parts(map.ptr.cast(), map.size as usize) };
                 dbg.field("type", &stringify!(DDWAF_OBJ_MAP))
-                    .field(field, &array)
+                    .field("map", &map)
             }
             DDWAF_OBJ_NULL => dbg.field("type", &stringify!(DDWAF_OBJ_NULL)),
             DDWAF_OBJ_INVALID => dbg.field("type", &stringify!(DDWAF_OBJ_INVALID)),
@@ -280,5 +256,14 @@ impl std::fmt::Debug for ddwaf_object {
         };
 
         dbg.finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for _ddwaf_object_kv {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut dbg = f.debug_struct("ddwaf_object_kv");
+        dbg.field("key", &self.key)
+            .field("val", &self.val)
+            .finish_non_exhaustive()
     }
 }

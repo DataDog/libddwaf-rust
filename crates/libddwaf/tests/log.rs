@@ -21,3 +21,47 @@ fn test_log_callback() {
     unsafe { reset_log_cb() };
     assert_eq!(LOG_COUNT.load(Ordering::SeqCst), 1);
 }
+
+#[test]
+fn test_level_display() {
+    assert_eq!(format!("{}", Level::Trace), "TRACE");
+    assert_eq!(format!("{}", Level::Debug), "DEBUG");
+    assert_eq!(format!("{}", Level::Info), "INFO");
+    assert_eq!(format!("{}", Level::Warn), "WARN");
+    assert_eq!(format!("{}", Level::Error), "ERROR");
+    assert_eq!(format!("{}", Level::Off), "OFF");
+}
+
+#[test]
+fn test_level_try_from() {
+    assert_eq!(
+        Level::try_from(libddwaf_sys::DDWAF_LOG_TRACE).unwrap(),
+        Level::Trace
+    );
+    assert_eq!(
+        Level::try_from(libddwaf_sys::DDWAF_LOG_DEBUG).unwrap(),
+        Level::Debug
+    );
+    assert_eq!(
+        Level::try_from(libddwaf_sys::DDWAF_LOG_INFO).unwrap(),
+        Level::Info
+    );
+    assert_eq!(
+        Level::try_from(libddwaf_sys::DDWAF_LOG_WARN).unwrap(),
+        Level::Warn
+    );
+    assert_eq!(
+        Level::try_from(libddwaf_sys::DDWAF_LOG_ERROR).unwrap(),
+        Level::Error
+    );
+    assert_eq!(
+        Level::try_from(libddwaf_sys::DDWAF_LOG_OFF).unwrap(),
+        Level::Off
+    );
+
+    // Test unknown level
+    let result = Level::try_from(0xFF);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert_eq!(format!("{}", err), "Unknown log level: 0xFF");
+}

@@ -1,5 +1,3 @@
-use std::ffi::CStr;
-
 use libddwaf::{OBFUSCATOR_DEFAULT_KEY_REGEX, OBFUSCATOR_DEFAULT_VAL_REGEX, Obfuscator};
 
 #[test]
@@ -15,8 +13,7 @@ pub fn key_only_obfuscator() {
     assert_eq!(
         obfuscator
             .key_regex()
-            .map(CStr::to_str)
-            .and_then(Result::ok),
+            .map(|r| unsafe { std::str::from_utf8_unchecked(r) }),
         Some(".*")
     );
     assert!(obfuscator.value_regex().is_none());
@@ -29,8 +26,7 @@ pub fn value_only_obfuscator() {
     assert_eq!(
         obfuscator
             .value_regex()
-            .map(CStr::to_str)
-            .and_then(Result::ok),
+            .map(|r| unsafe { std::str::from_utf8_unchecked(r) }),
         Some(".*")
     );
 }
@@ -45,15 +41,13 @@ pub fn clone_validity() {
     assert_eq!(
         obfuscator
             .key_regex()
-            .map(CStr::to_str)
-            .and_then(Result::ok),
+            .map(|r| unsafe { std::str::from_utf8_unchecked(r) }),
         Some(OBFUSCATOR_DEFAULT_KEY_REGEX)
     );
     assert_eq!(
         obfuscator
             .value_regex()
-            .map(CStr::to_str)
-            .and_then(Result::ok),
+            .map(|r| unsafe { std::str::from_utf8_unchecked(r) }),
         Some(OBFUSCATOR_DEFAULT_VAL_REGEX)
     );
 }

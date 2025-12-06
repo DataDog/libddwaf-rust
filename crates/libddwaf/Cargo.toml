@@ -10,7 +10,7 @@ categories.workspace = true
 keywords.workspace = true
 
 [dependencies]
-libddwaf-sys = { version = "1.26.0", path = "../libddwaf-sys", default-features = false }
+libddwaf-sys = { version = "1.26.0", path = "../libddwaf-sys", default-features = false, features = ["link-stdcxx"] }
 serde = { version = "1.0", optional = true }
 
 [dev-dependencies]

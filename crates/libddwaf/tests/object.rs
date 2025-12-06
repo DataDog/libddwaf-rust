@@ -122,7 +122,7 @@ fn sample_mixed_object() {
         \"key 1\"=WafString(\"value 1\"), \"key 2\"=\
         WafSigned(-2), \"key 3\"=WafUnsigned(2), \
         \"key 4\"=WafFloat(5.2), \"key 5\"=WafNull, \
-        \"key 6\"=WafBool(true), \"\"=WafInvalid}]"
+        \"key 6\"=WafBool(true), WafInvalid=WafInvalid}]"
     );
 }
 
@@ -219,7 +219,7 @@ fn invalid_utf8() {
 fn empty_key() {
     let map = waf_map!(("", 42_u64));
     let empty_slice: &[u8] = &[];
-    assert_eq!(map[0].key(), empty_slice);
+    assert_eq!(map[0].key_bstr().unwrap(), empty_slice);
 }
 
 #[test]
@@ -256,7 +256,7 @@ fn keyed_obj_methods() {
     let elem = &mut map[0];
     assert!(elem.as_type::<WafBool>().is_none());
     let elem_cast = elem.as_type::<WafUnsigned>().unwrap();
-    assert_eq!(elem_cast.value(), 42u64);
+    assert_eq!(elem_cast.value().value(), 42u64);
 
     assert!(elem.as_type_mut::<WafBool>().is_none());
     let elem_cast = elem.as_type_mut::<WafUnsigned>().unwrap();
@@ -269,17 +269,25 @@ fn map_fetching_methods() {
     let mut map = waf_map!(("key1", 1u64), ("key2", 2u64),);
 
     // index
-    assert_eq!(map[0].key(), b"key1");
+    assert_eq!(map[0].key_bstr().unwrap(), b"key1");
     // index mut
-    map[0].set_key(b"new key");
-    assert_eq!(map[0].key(), b"new key");
+    map[0].set_key_bstr(b"new key");
+    assert_eq!(map[0].key_bstr().unwrap(), b"new key");
 
     // get
-    assert_eq!(map.get(b"key2").unwrap().to_u64().unwrap(), 2);
-    assert!(map.get(b"bad key").is_none());
+    assert_eq!(map.get_bstr(b"key2").unwrap().to_u64().unwrap(), 2);
+    assert!(map.get_bstr(b"bad key").is_none());
     // get_str
     assert_eq!(map.get_str("key2").unwrap().to_u64().unwrap(), 2);
     assert!(map.get_str("bad key").is_none());
+    // get
+    assert_eq!(
+        map.get(WafString::new_literal(&b"key2"[..]))
+            .unwrap()
+            .to_u64()
+            .unwrap(),
+        2
+    );
 
     // get_mut
     map.get_mut(b"key2").unwrap().set_key_str("key3");
@@ -291,7 +299,7 @@ fn map_fetching_methods() {
     assert!(map.get_mut(b"bad key").is_none());
 
     // get_str_mut
-    map.get_str_mut("key3").unwrap().set_key(b"key4");
+    map.get_str_mut("key3").unwrap().set_key_bstr(b"key4");
     assert_eq!(map.get_str("key4").unwrap().to_u64().unwrap(), 3);
 
     assert!(map.get_str_mut("bad key").is_none());
@@ -673,4 +681,95 @@ fn test_from_json() {
     assert!(WafObject::from_json("{").is_none());
     // Too large (but otherwise valid)
     assert!(WafObject::from_json(format!(r#""{}""#, "a".repeat(u32::MAX as usize + 1))).is_none());
+}
+
+#[test]
+fn test_array_from_large_slice_truncates() {
+    const EXCESS_SIZE: usize = u16::MAX as usize + 1;
+    let mut large_vec: Vec<WafObject> = (0..EXCESS_SIZE)
+        .map(|i| WafObject::from(i as u64))
+        .collect();
+
+    let array = WafArray::from(&mut large_vec[..]);
+
+    // Verify the array was truncated to u16::MAX
+    assert_eq!(array.len(), u16::MAX);
+    assert_eq!(array.capacity(), u16::MAX);
+
+    // Verify the elements in the array are correct
+    assert_eq!(array[0].to_u64().unwrap(), 0);
+    assert_eq!(array[100].to_u64().unwrap(), 100);
+    assert_eq!(array[65534].to_u64().unwrap(), 65534);
+
+    // After From<&mut [T]>, the first u16::MAX elements in the vec are taken (replaced with default)
+    // The element at index 65535 (the excess one) should still exist
+    assert_eq!(large_vec.len(), EXCESS_SIZE);
+    assert_eq!(large_vec[0].get_type(), WafObjectType::Invalid);
+    assert_eq!(large_vec[65535].to_u64().unwrap(), 65535);
+}
+
+#[test]
+fn test_array_from_large_array_truncates() {
+    const EXCESS_SIZE: usize = u16::MAX as usize + 1;
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024) // 32 MB stack
+        .spawn(|| {
+            let large_array: [WafObject; EXCESS_SIZE] = std::array::from_fn(|i| (i as u64).into());
+            let array = WafArray::from(large_array);
+
+            assert_eq!(array.len(), u16::MAX);
+            assert_eq!(array.capacity(), u16::MAX);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn test_map_from_large_slice_truncates() {
+    const EXCESS_SIZE: usize = u16::MAX as usize + 1;
+    let mut large_vec: Vec<(WafObject, WafObject)> = (0..EXCESS_SIZE)
+        .map(|i| {
+            (
+                WafObject::from(format!("key{}", i).as_str()),
+                WafObject::from(i as u64),
+            )
+        })
+        .collect();
+
+    let map = WafMap::from(&mut large_vec[..]);
+
+    assert_eq!(map.len(), u16::MAX);
+    assert_eq!(map.capacity(), u16::MAX);
+
+    assert_eq!(map.get_str("key0").unwrap().to_u64().unwrap(), 0);
+    assert_eq!(map.get_str("key100").unwrap().to_u64().unwrap(), 100);
+    assert_eq!(map.get_str("key65534").unwrap().to_u64().unwrap(), 65534);
+
+    assert_eq!(large_vec.len(), EXCESS_SIZE);
+    assert_eq!(large_vec[0].0.get_type(), WafObjectType::Invalid);
+    assert_eq!(large_vec[0].1.get_type(), WafObjectType::Invalid);
+    assert_eq!(large_vec[65535].0.to_str().unwrap(), "key65535");
+    assert_eq!(large_vec[65535].1.to_u64().unwrap(), 65535);
+}
+
+#[test]
+fn test_map_from_large_array_truncates() {
+    const EXCESS_SIZE: usize = u16::MAX as usize + 1;
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024) // 32 MB stack
+        .spawn(|| {
+            let large_array: [(WafObject, WafObject); EXCESS_SIZE] = std::array::from_fn(|i| {
+                (
+                    WafObject::from(format!("key{}", i).as_str()),
+                    WafObject::from(i as u64),
+                )
+            });
+            let map = WafMap::from(large_array);
+            assert_eq!(map.len(), u16::MAX);
+            assert_eq!(map.capacity(), u16::MAX);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }
