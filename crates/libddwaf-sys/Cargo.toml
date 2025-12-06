@@ -33,6 +33,7 @@ zstd = "0.13"
 default = []
 fips = ["hyper-rustls/fips", "rustls/fips"]
 dynamic = ["lazy_static", "libloading", "tempfile", "tracing", "zstd"]
+link-stdcxx = []
 
 [lints]
 workspace = true
