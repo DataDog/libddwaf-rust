@@ -20,7 +20,10 @@ serde_json = "1.0"
 default = ["serde"]
 fips = ["libddwaf-sys/fips"]
 serde = ["dep:serde"]
+# Embeds libddwaf and loads it with dlopen at runtime (no external library needed)
 dynamic = ["libddwaf-sys/dynamic"]
+# Links to libddwaf dynamically via system linker (requires libddwaf.so at runtime)
+dynamic-link = ["libddwaf-sys/dynamic-link"]
 
 [lints]
 workspace = true

@@ -12,6 +12,13 @@ use tar::Archive;
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
+    let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
+    let feature_dynamic_link = env::var("CARGO_FEATURE_DYNAMIC_LINK").is_ok();
+
+    if feature_dynamic && feature_dynamic_link {
+        panic!("The `dynamic` and `dynamic-link` features are mutually exclusive. Please enable only one.");
+    }
+
     if cfg!(target_env = "musl") && cfg!(target_feature = "crt-static") {
         println!(
             "cargo::warning=The crt-static target feature must be disabled when building on musl targets."
@@ -43,9 +50,6 @@ fn main() {
     let version =
         env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION environment variable not set");
 
-    // Check if the `dynamic` feature is enabled.
-    let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
-
     // Check if a custom libddwaf installation prefix is provided
     let (include_dir, lib_dir, soname) = if let Some(prefix) = env::var_os("LIBDDWAF_PREFIX") {
         from_installed_libddwaf(&prefix)
@@ -58,7 +62,9 @@ fn main() {
         "cargo::rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
-    if !feature_dynamic {
+    if feature_dynamic_link {
+        println!("cargo::rustc-link-lib=dylib=ddwaf");
+    } else if !feature_dynamic {
         println!("cargo::rustc-link-lib=static=ddwaf");
     }
 
