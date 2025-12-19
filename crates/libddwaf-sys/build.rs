@@ -63,13 +63,16 @@ fn main() {
     }
 
     // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a/.so.
-    #[cfg(target_os = "macos")]
-    println!("cargo::rustc-link-lib=c++");
-
     // Linux needs to link against libstdc++ for C++ standard library symbols
     // This can be controlled via the `link-stdcxx` feature
-    #[cfg(all(target_os = "linux", feature = "link-stdcxx"))]
-    println!("cargo::rustc-link-lib=stdc++");
+    // Note: We check the TARGET environment variable, not cfg!(target_os), because
+    // cfg! evaluates for the build script's host, not the cross-compilation target
+    let target = env::var("TARGET").expect("TARGET environment variable not set");
+    if target.contains("apple") || target.contains("darwin") {
+        println!("cargo::rustc-link-lib=c++");
+    } else if target.contains("linux") && env::var("CARGO_FEATURE_LINK_STDCXX").is_ok() {
+        println!("cargo::rustc-link-lib=static=stdc++");
+    }
 
     // if we want to disable this in final binaries, see maybe
     // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
