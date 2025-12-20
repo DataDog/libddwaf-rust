@@ -62,6 +62,13 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
         Ok(WafObject::from(v))
     }
 
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(WafObject::from(v))
+    }
+
     fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
     where
         E: Error,
