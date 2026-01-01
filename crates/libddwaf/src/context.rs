@@ -2,8 +2,9 @@ use std::error;
 use std::fmt;
 use std::time::Duration;
 
+use crate::object::WafOwnedOutputAllocator;
 use crate::object::get_default_allocator;
-use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject, WafOwned};
+use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject};
 
 /// A WAF Context that can be used to evaluate the configured ruleset against address data.
 ///
@@ -156,7 +157,7 @@ impl error::Error for RunError {}
 /// The data produced by a [`Context::run`] operation.
 #[repr(transparent)]
 pub struct RunOutput {
-    data: WafOwned<WafMap>,
+    data: WafOwnedOutputAllocator<WafMap>,
 }
 impl RunOutput {
     /// Returns true if the WAF did not have enough time to process all the address data that was

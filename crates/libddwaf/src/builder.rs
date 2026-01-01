@@ -1,6 +1,6 @@
 use std::ptr::null_mut;
 
-use crate::object::{AsRawMutObject, WafArray, WafMap, WafOwned};
+use crate::object::{AsRawMutObject, WafArray, WafMap, WafOwnedDefaultAllocator};
 use crate::{Config, Handle};
 
 /// A builder for [`Handle`]s.
@@ -50,7 +50,7 @@ impl Builder {
         &mut self,
         path: &str,
         ruleset: &impl AsRef<libddwaf_sys::ddwaf_object>,
-        diagnostics: Option<&mut WafOwned<WafMap>>,
+        diagnostics: Option<&mut WafOwnedDefaultAllocator<WafMap>>,
     ) -> bool {
         debug_assert!(
             !path.is_empty(),
@@ -110,8 +110,9 @@ impl Builder {
     /// # Panics
     /// Panics if the provided `filter` regular expression is longer than [`u32::MAX`] bytes.
     #[must_use]
-    pub fn config_paths(&mut self, filter: Option<&'_ str>) -> WafOwned<WafArray> {
-        let mut res = WafOwned::<WafArray>::default();
+    pub fn config_paths(&mut self, filter: Option<&'_ str>) -> WafOwnedDefaultAllocator<WafArray> {
+        // SAFETY: ddwaf_builder_get_config_paths uses the default allocator
+        let mut res = WafOwnedDefaultAllocator::<WafArray>::default();
         let filter = filter.unwrap_or("");
         let filter_len = u32::try_from(filter.len()).expect("filter is too long");
         let _ = unsafe {

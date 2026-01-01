@@ -167,23 +167,24 @@ impl WafObject {
     /// # Returns
     /// Returns [`None`] if parsing the JSON string into a [`WafObject`] was not
     /// possible, or if the input JSON string is larger than [`u32::MAX`] bytes.
-    pub fn from_json(json: impl AsRef<[u8]>) -> Option<WafOwned<Self>> {
-        let mut obj = WafOwned::<Self>::default();
+    pub fn from_json(json: impl AsRef<[u8]>) -> Option<WafOwnedOutputAllocator<Self>> {
+        let mut output = WafOwnedOutputAllocator::<Self>::default();
         let data = json.as_ref();
         let Ok(len) = u32::try_from(data.len()) else {
             return None;
         };
         if !unsafe {
+            let alloc = WafOwnedOutputAllocator::<Self>::get_allocator();
             libddwaf_sys::ddwaf_object_from_json(
-                obj.as_raw_mut(),
+                output.as_raw_mut(),
                 data.as_ptr().cast(),
                 len,
-                get_default_allocator().into(),
+                alloc,
             )
         } {
             return None;
         }
-        Some(obj)
+        Some(output)
     }
 
     /// Returns the [`WafObjectType`] of the underlying value.
@@ -432,47 +433,75 @@ impl<T: AsRef<libddwaf_sys::ddwaf_object>> cmp::PartialEq<T> for WafObject {
 }
 impl crate::private::Sealed for WafObject {}
 
+/// Trait to encode which allocator should be used for deallocation in the type system.
+pub trait AllocatorType: 'static {
+    /// Get the allocator to use for deallocation.
+    fn get_allocator() -> libddwaf_sys::ddwaf_allocator;
+}
+
+/// Allocator type that uses the system default allocator.
+pub struct SystemDefaultAllocator;
+impl AllocatorType for SystemDefaultAllocator {
+    fn get_allocator() -> libddwaf_sys::ddwaf_allocator {
+        unsafe { libddwaf_sys::ddwaf_get_default_allocator() }
+    }
+}
+
+/// Allocator type that uses the Rust-registered allocator.
+pub struct RustAllocator;
+impl AllocatorType for RustAllocator {
+    fn get_allocator() -> libddwaf_sys::ddwaf_allocator {
+        get_default_allocator().into()
+    }
+}
+
 /// A WAF-owned [`WafObject`] or [`TypedWafObject`] value.
 ///
 /// This has different [`Drop`] behavior than a rust-owned [`WafObject`] value.
-pub struct WafOwned<T: AsRawMutObject> {
+/// The allocator used for deallocation is encoded in the type parameter `A`.
+#[repr(transparent)]
+pub struct WafOwned<T: AsRawMutObject, A: AllocatorType = RustAllocator> {
     inner: std::mem::ManuallyDrop<T>,
+    _phantom: std::marker::PhantomData<A>,
 }
-impl<T: AsRawMutObject + fmt::Debug> fmt::Debug for WafOwned<T> {
+impl<T: AsRawMutObject, A: AllocatorType> WafOwned<T, A> {
+    pub(crate) fn get_allocator() -> libddwaf_sys::ddwaf_allocator {
+        A::get_allocator()
+    }
+}
+
+impl<T: AsRawMutObject + fmt::Debug, A: AllocatorType> fmt::Debug for WafOwned<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.deref().fmt(f)
     }
 }
-impl<T: AsRawMutObject + Default> Default for WafOwned<T> {
+impl<T: AsRawMutObject + Default, A: AllocatorType> Default for WafOwned<T, A> {
     fn default() -> Self {
         Self {
             inner: std::mem::ManuallyDrop::new(Default::default()),
+            _phantom: std::marker::PhantomData,
         }
     }
 }
-impl<T: AsRawMutObject> Deref for WafOwned<T> {
+impl<T: AsRawMutObject, A: AllocatorType> Deref for WafOwned<T, A> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
-impl<T: AsRawMutObject> DerefMut for WafOwned<T> {
+impl<T: AsRawMutObject, A: AllocatorType> DerefMut for WafOwned<T, A> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
-impl<T: AsRawMutObject> Drop for WafOwned<T> {
+impl<T: AsRawMutObject, A: AllocatorType> Drop for WafOwned<T, A> {
     fn drop(&mut self) {
         unsafe {
-            libddwaf_sys::ddwaf_object_destroy(
-                self.inner.as_raw_mut(),
-                // we use this allocator in `Handle::new_context`
-                get_default_allocator().into(),
-            );
+            libddwaf_sys::ddwaf_object_destroy(self.inner.as_raw_mut(), A::get_allocator());
         }
     }
 }
-impl<T: AsRawMutObject> PartialEq<T> for WafOwned<T>
+impl<T: AsRawMutObject, A: AllocatorType> PartialEq<T> for WafOwned<T, A>
 where
     T: PartialEq<T>,
 {
@@ -480,6 +509,12 @@ where
         *self.inner == *other
     }
 }
+
+/// Type alias for WAF-owned objects using the system default allocator.
+pub type WafOwnedDefaultAllocator<T> = WafOwned<T, SystemDefaultAllocator>;
+
+/// Type alias for WAF-owned objects using the Rust-registered allocator (for outputs).
+pub type WafOwnedOutputAllocator<T> = WafOwned<T, RustAllocator>;
 
 /// Allocates memory for the given [`Layout`], calling [`std::alloc::handle_alloc_error`] if the
 /// allocation failed.

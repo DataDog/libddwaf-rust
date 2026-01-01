@@ -3,6 +3,7 @@ check: test miri clippy format_check
 
 test:
 	cargo test --all-targets
+	cargo test --doc
 .PHONY: test
 
 miri:

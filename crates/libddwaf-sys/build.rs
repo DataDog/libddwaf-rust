@@ -16,7 +16,9 @@ fn main() {
     let feature_dynamic_link = env::var("CARGO_FEATURE_DYNAMIC_LINK").is_ok();
 
     if feature_dynamic && feature_dynamic_link {
-        panic!("The `dynamic` and `dynamic-link` features are mutually exclusive. Please enable only one.");
+        panic!(
+            "The `dynamic` and `dynamic-link` features are mutually exclusive. Please enable only one."
+        );
     }
 
     if cfg!(target_env = "musl") && cfg!(target_feature = "crt-static") {

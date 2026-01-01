@@ -10,9 +10,10 @@
 use std::sync::LazyLock;
 use std::{sync::Arc, time::Duration};
 
+use libddwaf::object::WafOwnedDefaultAllocator;
 use libddwaf::{
     Builder, Config, RunResult, RunnableContext,
-    object::{WafArray, WafMap, WafObject, WafOwned},
+    object::{WafArray, WafMap, WafObject},
     waf_array, waf_map,
 };
 
@@ -50,7 +51,7 @@ static ARACHNI_RULE: LazyLock<WafMap> = LazyLock::new(|| {
 #[test]
 fn basic_run_rule_with_match() {
     let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
-    let mut diagnostics = WafOwned::<WafMap>::default();
+    let mut diagnostics = WafOwnedDefaultAllocator::<WafMap>::default();
     assert!(builder.add_or_update_config(
         "rules",
         LazyLock::force(&ARACHNI_RULE),
@@ -109,7 +110,7 @@ fn basic_run_rule_with_match() {
 #[test]
 fn basic_run_rule_with_no_match() {
     let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
-    let mut diagnostics = WafOwned::<WafMap>::default();
+    let mut diagnostics = WafOwnedDefaultAllocator::<WafMap>::default();
     assert!(builder.add_or_update_config(
         "rules",
         LazyLock::force(&ARACHNI_RULE),
@@ -230,7 +231,7 @@ fn test_run_error_display() {
 #[test]
 fn test_run_output_debug() {
     let mut builder = Builder::new(Some(&Config::default())).expect("builder should be created");
-    let mut diagnostics = WafOwned::<WafMap>::default();
+    let mut diagnostics = WafOwnedDefaultAllocator::<WafMap>::default();
     assert!(builder.add_or_update_config("test", &*ARACHNI_RULE, Some(&mut diagnostics)));
     let waf = builder.build().expect("waf should be created");
 

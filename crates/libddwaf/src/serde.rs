@@ -405,7 +405,7 @@ struct LimitedVisitor<'a> {
     state: &'a LimitedState<'a>,
 }
 
-impl<'de, 'a> serde::de::Visitor<'de> for LimitedVisitor<'a> {
+impl<'de> serde::de::Visitor<'de> for LimitedVisitor<'_> {
     type Value = WafObject;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -563,9 +563,10 @@ impl<'de, 'a> serde::de::Visitor<'de> for LimitedVisitor<'a> {
             map.size_hint().map(Vec::with_capacity).unwrap_or_default();
 
         while self.state.elements_remaining.get() > 0 {
-            match map.next_entry_seed(LimitedSeed { state: self.state }, LimitedSeed {
-                state: self.state,
-            })? {
+            match map.next_entry_seed(
+                LimitedSeed { state: self.state },
+                LimitedSeed { state: self.state },
+            )? {
                 Some(pair @ (_, _)) => vec.push(pair.into()),
                 None => break,
             }
