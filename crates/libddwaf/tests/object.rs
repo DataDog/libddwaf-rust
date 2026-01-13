@@ -219,7 +219,7 @@ fn invalid_utf8() {
 fn empty_key() {
     let map = waf_map!(("", 42_u64));
     let empty_slice: &[u8] = &[];
-    assert_eq!(map[0].key_bstr().unwrap(), empty_slice);
+    assert_eq!(map[0].key_bytes().unwrap(), empty_slice);
 }
 
 #[test]
@@ -269,10 +269,10 @@ fn map_fetching_methods() {
     let mut map = waf_map!(("key1", 1u64), ("key2", 2u64),);
 
     // index
-    assert_eq!(map[0].key_bstr().unwrap(), b"key1");
+    assert_eq!(map[0].key_bytes().unwrap(), b"key1");
     // index mut
-    map[0].set_key_bstr(b"new key");
-    assert_eq!(map[0].key_bstr().unwrap(), b"new key");
+    map[0].set_key_bytes(b"new key");
+    assert_eq!(map[0].key_bytes().unwrap(), b"new key");
 
     // get
     assert_eq!(map.get_bstr(b"key2").unwrap().to_u64().unwrap(), 2);
@@ -299,7 +299,7 @@ fn map_fetching_methods() {
     assert!(map.get_mut(b"bad key").is_none());
 
     // get_str_mut
-    map.get_str_mut("key3").unwrap().set_key_bstr(b"key4");
+    map.get_str_mut("key3").unwrap().set_key_bytes(b"key4");
     assert_eq!(map.get_str("key4").unwrap().to_u64().unwrap(), 3);
 
     assert!(map.get_str_mut("bad key").is_none());

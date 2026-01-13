@@ -178,7 +178,7 @@ fn run_rule_threaded() {
     )
         .into();
 
-    let t: Vec<_> = (0..2)
+    let threads: Vec<_> = (0..2)
         .map(|_| {
             let waf = waf.clone();
             let data = data.clone();
@@ -207,7 +207,9 @@ fn run_rule_threaded() {
         })
         .collect();
 
-    t.into_iter().for_each(|t| t.join().unwrap());
+    for t in threads {
+        t.join().unwrap();
+    }
 }
 
 #[test]
@@ -245,12 +247,12 @@ fn test_run_output_debug() {
     match ctx.run(data, Duration::from_secs(1)) {
         Ok(RunResult::Match(output)) => {
             // Test that Debug formatting works
-            let debug_str = format!("{:?}", output);
+            let debug_str = format!("{output:?}");
             assert!(debug_str.contains("RunOutput"));
             assert!(debug_str.contains("timeout"));
             assert!(debug_str.contains("keep"));
             assert!(debug_str.contains("duration"));
         }
-        other => panic!("Expected match result, got: {:?}", other),
+        other => panic!("Expected match result, got: {other:?}"),
     }
 }

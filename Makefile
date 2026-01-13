@@ -7,7 +7,7 @@ test:
 .PHONY: test
 
 miri:
-	PATH="/home/glopes/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin:$$PATH" cargo miri test --lib --tests
+	cargo +nightly miri test --lib --tests
 .PHONY: miri
 
 coverage:

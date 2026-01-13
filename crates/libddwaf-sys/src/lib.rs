@@ -39,10 +39,13 @@ impl ddwaf_object {
             return;
         }
         for i in 0..array.size {
+            // We don't support 16-bit isize, so the unsigned -> signed cast is safe.
             #[allow(clippy::cast_possible_wrap)]
             let elem = unsafe { &mut *array.ptr.offset(i as isize) };
             unsafe { elem.drop_object() };
         }
+        // Could only panic if sizeof(ddwaf_object) * capacity > isize::MAX, which can't happen
+        // given that capacity is limited to u16::MAX.
         let layout = Layout::array::<ddwaf_object>(array.capacity as usize).unwrap();
         unsafe { std::alloc::dealloc(array.ptr.cast(), layout) };
     }

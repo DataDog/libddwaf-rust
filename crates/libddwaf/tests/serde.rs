@@ -440,7 +440,7 @@ fn limits_visit_primitives_success_paths() {
     let mut deserializer = serde_json::Deserializer::from_str(json);
     let result = deserialize_with_limits(&mut deserializer, &limits).unwrap();
     assert!(!result.truncated);
-    assert_eq!(result.value.to_bool().unwrap(), false);
+    assert!(!result.value.to_bool().unwrap());
 
     // Test null (unit)
     let json = "null";

@@ -174,7 +174,7 @@ impl WafObject {
             return None;
         };
         if !unsafe {
-            let alloc = WafOwnedOutputAllocator::<Self>::get_allocator();
+            let alloc = WafOwnedOutputAllocator::<Self>::allocator();
             libddwaf_sys::ddwaf_object_from_json(
                 output.as_raw_mut(),
                 data.as_ptr().cast(),
@@ -408,8 +408,7 @@ impl From<&str> for WafObject {
 }
 impl From<&[u8]> for WafObject {
     fn from(value: &[u8]) -> Self {
-        let ws: WafString = value.into();
-        ws.into()
+        WafString::from(value).into()
     }
 }
 impl From<()> for WafObject {
@@ -436,13 +435,13 @@ impl crate::private::Sealed for WafObject {}
 /// Trait to encode which allocator should be used for deallocation in the type system.
 pub trait AllocatorType: 'static {
     /// Get the allocator to use for deallocation.
-    fn get_allocator() -> libddwaf_sys::ddwaf_allocator;
+    fn allocator() -> libddwaf_sys::ddwaf_allocator;
 }
 
-/// Allocator type that uses the system default allocator.
-pub struct SystemDefaultAllocator;
-impl AllocatorType for SystemDefaultAllocator {
-    fn get_allocator() -> libddwaf_sys::ddwaf_allocator {
+/// Allocator type that uses libddwaf's default.
+pub struct LibddwafDefaultAllocator;
+impl AllocatorType for LibddwafDefaultAllocator {
+    fn allocator() -> libddwaf_sys::ddwaf_allocator {
         unsafe { libddwaf_sys::ddwaf_get_default_allocator() }
     }
 }
@@ -450,7 +449,7 @@ impl AllocatorType for SystemDefaultAllocator {
 /// Allocator type that uses the Rust-registered allocator.
 pub struct RustAllocator;
 impl AllocatorType for RustAllocator {
-    fn get_allocator() -> libddwaf_sys::ddwaf_allocator {
+    fn allocator() -> libddwaf_sys::ddwaf_allocator {
         get_default_allocator().into()
     }
 }
@@ -465,8 +464,8 @@ pub struct WafOwned<T: AsRawMutObject, A: AllocatorType = RustAllocator> {
     _phantom: std::marker::PhantomData<A>,
 }
 impl<T: AsRawMutObject, A: AllocatorType> WafOwned<T, A> {
-    pub(crate) fn get_allocator() -> libddwaf_sys::ddwaf_allocator {
-        A::get_allocator()
+    pub(crate) fn allocator() -> libddwaf_sys::ddwaf_allocator {
+        A::allocator()
     }
 }
 
@@ -497,7 +496,7 @@ impl<T: AsRawMutObject, A: AllocatorType> DerefMut for WafOwned<T, A> {
 impl<T: AsRawMutObject, A: AllocatorType> Drop for WafOwned<T, A> {
     fn drop(&mut self) {
         unsafe {
-            libddwaf_sys::ddwaf_object_destroy(self.inner.as_raw_mut(), A::get_allocator());
+            libddwaf_sys::ddwaf_object_destroy(self.inner.as_raw_mut(), A::allocator());
         }
     }
 }
@@ -511,7 +510,7 @@ where
 }
 
 /// Type alias for WAF-owned objects using the system default allocator.
-pub type WafOwnedDefaultAllocator<T> = WafOwned<T, SystemDefaultAllocator>;
+pub type WafOwnedDefaultAllocator<T> = WafOwned<T, LibddwafDefaultAllocator>;
 
 /// Type alias for WAF-owned objects using the Rust-registered allocator (for outputs).
 pub type WafOwnedOutputAllocator<T> = WafOwned<T, RustAllocator>;
@@ -807,7 +806,6 @@ typed_object!(WafObjectType::Array => WafArray {
     /// # Panics
     /// Panics if memory allocation fails (out of memory).
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub fn new(nb_entries: u16) -> Self {
         let size = usize::from(nb_entries);
         let layout = Layout::array::<libddwaf_sys::ddwaf_object>(size).unwrap();
@@ -817,6 +815,7 @@ typed_object!(WafObjectType::Array => WafArray {
             raw: libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     array: libddwaf_sys::_ddwaf_object_array {
+                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_ARRAY as u8,
                         size: nb_entries,
                         capacity: nb_entries,
@@ -848,7 +847,12 @@ typed_object!(WafObjectType::Array => WafArray {
         unsafe { self.raw.via.array.capacity }
     }
 
-    #[allow(clippy::cast_possible_truncation)]
+    /// Truncates this [`WafArray`] to the provided size.
+    ///
+    /// Has no effect is the current length is not greater than the new size.
+    ///
+    /// It does not free the extra memory, except insofar as it drops the extra elements.
+    /// Useful when you pessimistically allocate a larger array, but later discover that you don't need all the capacity.
     pub fn truncate(&mut self, new_size: u16) {
         if new_size > self.len() {
             return;
@@ -881,7 +885,6 @@ typed_object!(WafObjectType::Map => WafMap {
     /// # Panics
     /// Panics if memory allocation fails (out of memory).
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub fn new(nb_entries: u16) -> Self {
         let size = usize::from(nb_entries);
         let layout = Layout::array::<libddwaf_sys::_ddwaf_object_kv>(size).unwrap();
@@ -891,6 +894,7 @@ typed_object!(WafObjectType::Map => WafMap {
             raw: libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     map: libddwaf_sys::_ddwaf_object_map {
+                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_MAP as u8,
                         size: nb_entries,
                         capacity: nb_entries,
@@ -922,6 +926,12 @@ typed_object!(WafObjectType::Map => WafMap {
         unsafe { self.raw.via.map.capacity }
     }
 
+    /// Truncates this [`WafMap`] to the provided size.
+    ///
+    /// Has no effect is the current length is not greater than the new size.
+    ///
+    /// It does not free the extra memory, except insofar as it drops the extra elements.
+    /// Useful when you pessimistically allocate a larger map, but later discover that you don't need all the capacity.
     pub fn truncate(&mut self, new_size: u16) {
         if new_size > self.len() {
             return;
@@ -995,12 +1005,12 @@ typed_object!(WafObjectType::Map => WafMap {
 typed_object!(WafObjectType::Bool => WafBool derive(Copy, Clone) {
     /// Creates a new [`WafBool`] with the provided value.
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub const fn new(val: bool) -> Self {
         Self {
             raw: libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     b8: libddwaf_sys::_ddwaf_object_bool {
+                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_BOOL as u8,
                         val,
                     },
@@ -1019,12 +1029,12 @@ typed_object!(WafObjectType::Bool => WafBool derive(Copy, Clone) {
 typed_object!(WafObjectType::Float => WafFloat derive(Copy, Clone) {
     /// Creates a new [`WafFloat`] with the provided value.
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub const fn new(val: f64) -> Self {
         Self {
             raw: libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     f64_: libddwaf_sys::_ddwaf_object_float {
+                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_FLOAT as u8,
                         val,
                     },
@@ -1043,12 +1053,12 @@ typed_object!(WafObjectType::Float => WafFloat derive(Copy, Clone) {
 typed_object!(WafObjectType::Null => WafNull derive(Copy, Clone) {
     /// Creates a new [`WafNull`].
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub const fn new() -> Self {
         Self {
             raw: libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     u64_: libddwaf_sys::_ddwaf_object_unsigned {
+                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_NULL as u8,
                         val: 0,
                     },
@@ -1118,21 +1128,25 @@ impl Drop for WafString {
     }
 }
 impl Clone for WafString {
-    #[allow(clippy::cast_possible_truncation)]
     fn clone(&self) -> Self {
         if self.raw.obj_type() == libddwaf_sys::DDWAF_OBJ_STRING {
-            let len = self.len() as usize;
-            let layout = Layout::array::<std::os::raw::c_char>(len).unwrap();
+            let len = self.len();
+            let layout = Layout::array::<std::os::raw::c_char>(len as usize).unwrap();
             let copied = unsafe { no_fail_alloc(layout).cast::<std::os::raw::c_char>() };
             unsafe {
-                std::ptr::copy_nonoverlapping(self.as_bytes().as_ptr().cast(), copied, len);
+                std::ptr::copy_nonoverlapping(
+                    self.as_bytes().as_ptr().cast(),
+                    copied,
+                    len as usize,
+                );
             }
             return Self {
                 raw: libddwaf_sys::ddwaf_object {
                     via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                         str_: libddwaf_sys::_ddwaf_object_string {
+                            #[allow(clippy::cast_possible_truncation)]
                             type_: libddwaf_sys::DDWAF_OBJ_STRING as u8,
-                            size: len as u32,
+                            size: len,
                             ptr: copied,
                         },
                     },
@@ -1184,7 +1198,6 @@ impl Drop for WafArray {
     }
 }
 impl Clone for WafArray {
-    #[allow(clippy::cast_possible_truncation)]
     fn clone(&self) -> Self {
         let size = self.len();
 
@@ -1207,6 +1220,7 @@ impl Clone for WafArray {
             raw: libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     array: libddwaf_sys::_ddwaf_object_array {
+                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_ARRAY as u8,
                         size,
                         capacity: size,
@@ -1218,9 +1232,9 @@ impl Clone for WafArray {
     }
 }
 impl<T: Into<WafObject>, const N: usize> From<[T; N]> for WafArray {
-    #[allow(clippy::cast_possible_truncation)]
     fn from(value: [T; N]) -> Self {
         let effective_length = N.min(u16::MAX as usize);
+        #[allow(clippy::cast_possible_truncation)]
         let mut array = Self::new(effective_length as u16);
         for (i, obj) in value.into_iter().enumerate() {
             if i >= effective_length {
@@ -1235,9 +1249,9 @@ impl<T> From<&mut [T]> for WafArray
 where
     T: Into<WafObject> + Default,
 {
-    #[allow(clippy::cast_possible_truncation)]
     fn from(value: &mut [T]) -> Self {
         let effective_length = value.len().min(u16::MAX as usize);
+        #[allow(clippy::cast_possible_truncation)]
         let mut array = Self::new(effective_length as u16);
         for (i, obj) in value.iter_mut().enumerate() {
             if i >= effective_length {
@@ -1306,7 +1320,6 @@ impl Drop for WafMap {
     }
 }
 impl Clone for WafMap {
-    #[allow(clippy::cast_possible_truncation)]
     fn clone(&self) -> Self {
         let size = self.len();
 
@@ -1329,6 +1342,7 @@ impl Clone for WafMap {
             raw: libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     map: libddwaf_sys::_ddwaf_object_map {
+                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_MAP as u8,
                         size,
                         capacity: size,
@@ -1357,9 +1371,9 @@ impl IndexMut<usize> for WafMap {
     }
 }
 impl<K: AsRef<[u8]>, V: Into<WafObject>, const N: usize> From<[(K, V); N]> for WafMap {
-    #[allow(clippy::cast_possible_truncation)]
     fn from(vals: [(K, V); N]) -> Self {
         let effective_length = N.min(u16::MAX as usize);
+        #[allow(clippy::cast_possible_truncation)]
         let mut map = WafMap::new(effective_length as u16);
         for (i, (k, v)) in vals.into_iter().enumerate() {
             if i >= effective_length {
@@ -1371,9 +1385,9 @@ impl<K: AsRef<[u8]>, V: Into<WafObject>, const N: usize> From<[(K, V); N]> for W
     }
 }
 impl<V: Into<WafObject>, const N: usize> From<[(WafObject, V); N]> for WafMap {
-    #[allow(clippy::cast_possible_truncation)]
     fn from(vals: [(WafObject, V); N]) -> Self {
         let effective_length = N.min(u16::MAX as usize);
+        #[allow(clippy::cast_possible_truncation)]
         let mut map = WafMap::new(effective_length as u16);
         for (i, (k, v)) in vals.into_iter().enumerate() {
             if i >= effective_length {
@@ -1389,9 +1403,9 @@ where
     K: Into<WafObject> + Default,
     V: Into<WafObject> + Default,
 {
-    #[allow(clippy::cast_possible_truncation)]
     fn from(value: &mut [(K, V)]) -> Self {
         let effective_length = value.len().min(u16::MAX as usize);
+        #[allow(clippy::cast_possible_truncation)]
         let mut map = Self::new(effective_length as u16);
         for (i, (k, v)) in value.iter_mut().enumerate() {
             if i >= effective_length {
@@ -1489,14 +1503,14 @@ impl<T: AsRawMutObject> Keyed<T> {
     /// [`std::str::from_utf8`] or if the key is not a [`WafString`].
     #[allow(invalid_from_utf8)]
     pub fn key_str(&self) -> Result<&str, Box<dyn std::error::Error>> {
-        std::str::from_utf8(self.key_bstr()?).map_err(std::convert::Into::into)
+        std::str::from_utf8(self.key_bytes()?).map_err(std::convert::Into::into)
     }
 
     /// Obtains the key associated with this [`Keyed<WafObject>`] as a byte slice.
     ///
     /// # Errors
     /// Returns an error if the underlying key data is not a [`WafString`].
-    pub fn key_bstr(&self) -> Result<&[u8], ObjectTypeError> {
+    pub fn key_bytes(&self) -> Result<&[u8], ObjectTypeError> {
         let key = self.key();
         match key.as_type::<WafString>() {
             Some(s) => Ok(s.as_bytes()),
@@ -1516,16 +1530,15 @@ impl<T: AsRawMutObject> Keyed<T> {
 
     /// Sets the key associated with this [`Keyed<WafObject>`].
     /// If the key is longer than `u32::MAX` bytes, it will be truncated.
-    pub fn set_key_bstr(&mut self, key: &[u8]) -> &mut Self {
+    pub fn set_key_bytes(&mut self, key: &[u8]) -> &mut Self {
         let key = WafString::from(key);
         self.set_key(key)
     }
 
     /// Sets the key associated with this [`Keyed<WafObject>`] to the provided string.
     /// If the key is longer than `u32::MAX` bytes, it will be truncated.
-    pub fn set_key_str(&mut self, key: &str) -> &mut Self {
-        let key = WafString::from(key);
-        self.set_key(key)
+    pub fn set_key_str(&mut self, key: impl Into<WafString>) -> &mut Self {
+        self.set_key(key.into())
     }
 }
 impl Keyed<WafObject> {

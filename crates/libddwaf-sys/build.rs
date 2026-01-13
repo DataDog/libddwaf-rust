@@ -58,6 +58,7 @@ fn main() {
     } else {
         from_github_release(&version, &out_dir)
     };
+    println!("cargo::rerun-if-env-changed=LIBDDWAF_PREFIX");
 
     // Add library search path and link directive
     println!(
@@ -132,7 +133,6 @@ fn main() {
         .expect("Failed to write bindings.rs");
 
     println!("cargo::rerun-if-changed=build.rs");
-    println!("cargo::rerun-if-env-changed=LIBDDWAF_PREFIX");
 }
 
 fn from_installed_libddwaf(prefix: impl AsRef<OsStr>) -> (PathBuf, PathBuf, &'static str) {
