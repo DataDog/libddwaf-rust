@@ -10,7 +10,7 @@ categories.workspace = true
 keywords.workspace = true
 
 [dependencies]
-libddwaf-sys = { version = "1.26.0", path = "../libddwaf-sys", default-features = false, features = ["link-stdcxx"] }
+libddwaf-sys = { version = "1.26.0", path = "../libddwaf-sys", default-features = false }
 serde = { version = "1.0", optional = true }
 
 [dev-dependencies]
@@ -24,6 +24,8 @@ serde = ["dep:serde"]
 dynamic = ["libddwaf-sys/dynamic"]
 # Links to libddwaf dynamically via system linker (requires libddwaf.so at runtime)
 dynamic-link = ["libddwaf-sys/dynamic-link"]
+# Link against libstdc++
+link-stdcxx = ["libddwaf-sys/link-stdcxx"]
 
 [lints]
 workspace = true
