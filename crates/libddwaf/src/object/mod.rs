@@ -677,10 +677,7 @@ typed_object!(WafObjectType::String => WafString
             return None;
         }
 
-        const SMALL_STRING_SIZE: usize = {
-            let m = unsafe {std::mem::zeroed::<libddwaf_sys::_ddwaf_object_small_string>() };
-            std::mem::size_of_val(&m.data)
-        }; // 14
+        const SMALL_STRING_SIZE: usize = 14;
 
         if val.len() <= SMALL_STRING_SIZE {
             let mut ss = libddwaf_sys::_ddwaf_object_small_string {
