@@ -138,15 +138,37 @@ jobs:
                     path: target/coverage/html
                     if-no-files-found: error
 
+    leak-check:
+        name: Leak Check
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+            - name: Cache
+              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              with:
+                  path: |-
+                    ~/.cargo/bin/
+                    ~/.cargo/git/db/
+                    ~/.cargo/registry/cache/
+                    ~/.cargo/registry/index/
+                    ~/.rustup/downloads/
+                    ~/.rustup/update-hashes/
+                    target/
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+            - name: Leak Check
+              run: make leak_check
+
     complete:
         name: Complete
-        needs: [linters, tests, docker-tests, coverage]
+        needs: [linters, tests, docker-tests, coverage, leak-check]
         if: '!cancelled()'
         runs-on: ubuntu-latest
         steps:
             - name: Success
-              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success'
+              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
               run: echo 'Success!'
             - name: Failure
-              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success'
+              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
               run: echo 'Failure!' && exit 1
