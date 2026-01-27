@@ -60,22 +60,15 @@ impl Obfuscator {
     /// Returns the regular expression used to determine key data to be obfuscated, if one has been
     /// set.
     #[must_use]
-    pub const fn key_regex(&self) -> Option<&[u8]> {
-        // as_deref() is not const
-        match self.key_regex.as_ref() {
-            Some(v) => Some(v.as_slice()),
-            None => None,
-        }
+    pub fn key_regex(&self) -> Option<&[u8]> {
+        self.key_regex.as_deref()
     }
 
     /// Returns the regular expression used to determine value data to be obfuscated, if one has
     /// been set.
     #[must_use]
-    pub const fn value_regex(&self) -> Option<&[u8]> {
-        match self.value_regex.as_ref() {
-            Some(v) => Some(v.as_slice()),
-            None => None,
-        }
+    pub fn value_regex(&self) -> Option<&[u8]> {
+        self.value_regex.as_deref()
     }
 }
 
