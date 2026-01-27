@@ -5,8 +5,8 @@ use libddwaf::Obfuscator;
 
 #[cfg(not(miri))]
 use libddwaf::{
-    Config, RunResult, RunnableContext,
     object::{WafArray, WafMap},
+    Config, RunResult, RunnableContext,
 };
 
 #[cfg(not(miri))]
@@ -94,7 +94,7 @@ fn get_match_value(rr: &RunResult) -> &str {
 #[test]
 #[cfg(not(miri))]
 fn default_uses_default_obfuscator() {
-    use libddwaf::{Builder, waf_map};
+    use libddwaf::{waf_map, Builder};
 
     let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
     assert!(builder.add_or_update_config("rules", &*PASSWORD_RULE, None));
@@ -117,7 +117,7 @@ fn default_uses_default_obfuscator() {
 #[test]
 #[cfg(not(miri))]
 fn none_uses_no_obfuscator() {
-    use libddwaf::{Builder, waf_map};
+    use libddwaf::{waf_map, Builder};
 
     let mut builder = Builder::new(None).expect("Failed to create builder");
     assert!(builder.add_or_update_config("rules", &*PASSWORD_RULE, None));
@@ -140,7 +140,7 @@ fn none_uses_no_obfuscator() {
 #[test]
 #[cfg(not(miri))]
 fn empty_values_use_effectively_no_obfuscator() {
-    use libddwaf::{Builder, waf_map};
+    use libddwaf::{waf_map, Builder};
 
     let obfuscator = Obfuscator::new(Some(""), Some(""));
     let mut builder =
@@ -165,7 +165,7 @@ fn empty_values_use_effectively_no_obfuscator() {
 #[test]
 #[cfg(not(miri))]
 pub fn with_an_actual_obfuscator() {
-    use libddwaf::{Builder, waf_map};
+    use libddwaf::{waf_map, Builder};
 
     let obfuscator = Obfuscator::new(Some(""), Some("bar"));
     let mut builder =

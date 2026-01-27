@@ -12,9 +12,8 @@ use std::{sync::Arc, time::Duration};
 
 use libddwaf::object::WafOwnedDefaultAllocator;
 use libddwaf::{
-    Builder, Config, RunResult, RunnableContext,
     object::{WafArray, WafMap, WafObject},
-    waf_array, waf_map,
+    waf_array, waf_map, Builder, Config, RunResult, RunnableContext,
 };
 
 static ARACHNI_RULE: LazyLock<WafMap> = LazyLock::new(|| {

@@ -2,7 +2,7 @@
 
 use libddwaf::{
     object::{WafArray, WafMap, WafObject, WafObjectType, WafString},
-    serde::{Limits, deserialize_with_limits},
+    serde::{deserialize_with_limits, Limits},
     waf_array, waf_map, waf_object,
 };
 use serde_json::from_str;

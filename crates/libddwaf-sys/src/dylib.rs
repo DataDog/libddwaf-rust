@@ -1,6 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
 
-use std::io::{Write, copy};
+use std::io::{copy, Write};
 
 use crate::*;
 

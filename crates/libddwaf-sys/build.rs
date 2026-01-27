@@ -3,7 +3,7 @@ use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
-use std::process::{Command, exit};
+use std::process::{exit, Command};
 
 use flate2::read::GzDecoder;
 use reqwest::blocking::get;

@@ -1,9 +1,8 @@
 #![cfg(not(miri))]
 
 use libddwaf::{
-    Builder, Config,
     object::{WafMap, WafOwnedDefaultAllocator},
-    waf_array, waf_map,
+    waf_array, waf_map, Builder, Config,
 };
 
 #[test]

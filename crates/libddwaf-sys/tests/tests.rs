@@ -379,7 +379,8 @@ fn test_eq_array_and_map() {
     let mut items2 = [_ddwaf_object_kv::default()];
     unsafe {
         ddwaf_object_set_unsigned(&mut items2[0].val, 42);
-        ddwaf_object_set_string_literal(&mut items2[0].key, b"yek".as_ptr().cast(), 3); // Different key
+        ddwaf_object_set_string_literal(&mut items2[0].key, b"yek".as_ptr().cast(), 3);
+        // Different key
     };
 
     let mut wrong = ddwaf_object::default();

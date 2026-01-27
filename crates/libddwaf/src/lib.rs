@@ -89,7 +89,7 @@ macro_rules! forward {
     ($($name:ident),*) => {
         $(
             mod $name;
-            #[doc(inline = true)]
+            #[doc(inline)]
             pub use $name::*;
         )*
     };

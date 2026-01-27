@@ -7,9 +7,9 @@
 use std::cell::Cell;
 
 use serde::{
-    Deserializer,
     de::Error,
     ser::{SerializeMap, SerializeSeq},
+    Deserializer,
 };
 
 use crate::object::{
