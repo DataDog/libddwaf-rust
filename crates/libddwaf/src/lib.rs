@@ -99,7 +99,7 @@ forward!(builder, config, context, handle);
 
 /// Returns the version of the underlying `libddwaf` library.
 #[must_use]
-pub fn get_version() -> &'static CStr {
+pub fn version() -> &'static CStr {
     let ptr = unsafe { libddwaf_sys::ddwaf_get_version() };
     if ptr.is_null() {
         unsafe { CStr::from_ptr("\0".as_ptr().cast()) }
@@ -112,8 +112,8 @@ pub fn get_version() -> &'static CStr {
 mod tests {
     #[test]
     #[cfg(not(miri))]
-    fn test_get_version() {
-        use crate::get_version;
+    fn test_version() {
+        use crate::version;
 
         if std::env::var("LIBDDWAF_PREFIX").is_ok() {
             eprintln!("Skipping test_get_version: LIBDDWAF_PREFIX is set");
@@ -122,7 +122,7 @@ mod tests {
 
         assert_eq!(
             env!("CARGO_PKG_VERSION"),
-            get_version()
+            version()
                 .to_str()
                 .expect("Failed to convert version to str")
         );

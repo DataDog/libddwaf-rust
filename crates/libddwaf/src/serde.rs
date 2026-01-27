@@ -134,7 +134,7 @@ impl serde::Serialize for WafObject {
     where
         S: serde::Serializer,
     {
-        match self.get_type() {
+        match self.object_type() {
             WafObjectType::Unsigned => {
                 unsafe { self.as_type_unchecked::<WafUnsigned>() }.serialize(serializer)
             }

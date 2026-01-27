@@ -27,7 +27,7 @@ fn sample_json_deserialization() {
     // Test for null
     let json = "null";
     let ddwaf_obj: WafObject = from_str(json).expect("Failed to deserialize null");
-    assert_eq!(ddwaf_obj.get_type(), WafObjectType::Null);
+    assert_eq!(ddwaf_obj.object_type(), WafObjectType::Null);
 
     // Test for a string
     let json = "\"hello\"";

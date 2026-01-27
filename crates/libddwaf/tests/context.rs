@@ -189,7 +189,7 @@ fn run_rule_threaded() {
                         let ctx = ctx.clone();
                         let data = data.clone();
                         std::thread::spawn(move || {
-                            let mut subctx = (*ctx).create_subcontext();
+                            let mut subctx = (*ctx).new_subcontext().unwrap();
 
                             let res = subctx.run(data, Duration::from_secs(1));
 

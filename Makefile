@@ -33,6 +33,10 @@ format_check:
 	cargo fmt -- --check
 .PHONY: format_check
 
+leak_check:
+	RUSTFLAGS="-Zsanitizer=leak" cargo +nightly test --all-targets --target-dir target/leak_check
+.PHONY: leak_check
+
 Cargo.lock: Cargo.toml
 	cargo check
 

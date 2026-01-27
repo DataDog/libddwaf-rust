@@ -7,7 +7,7 @@ pub struct Config {
     obfuscator: Obfuscator,
 }
 impl Config {
-    /// Creates a new [`Config`] with the provided [`Limits`] and [`Obfuscator`].
+    /// Creates a new [`Config`] with the provided [`Obfuscator`].
     #[must_use]
     pub fn new(obfuscator: Obfuscator) -> Self {
         Self { obfuscator }
@@ -18,12 +18,10 @@ impl Config {
         let mut map = WafMap::new(2);
         let mut used: u16 = 0;
         if let Some(key_regex) = self.obfuscator.key_regex() {
-            let key_regex: &[u8] = key_regex.as_ref();
             map[used as usize] = ("key_regex", key_regex).into();
             used += 1;
         }
         if let Some(value_regex) = self.obfuscator.value_regex() {
-            let value_regex: &[u8] = value_regex.as_ref();
             map[used as usize] = ("value_regex", value_regex).into();
             used += 1;
         }
@@ -62,15 +60,22 @@ impl Obfuscator {
     /// Returns the regular expression used to determine key data to be obfuscated, if one has been
     /// set.
     #[must_use]
-    pub const fn key_regex(&self) -> Option<&Vec<u8>> {
-        self.key_regex.as_ref()
+    pub const fn key_regex(&self) -> Option<&[u8]> {
+        // as_deref() is not const
+        match self.key_regex.as_ref() {
+            Some(v) => Some(v.as_slice()),
+            None => None,
+        }
     }
 
     /// Returns the regular expression used to determine value data to be obfuscated, if one has
     /// been set.
     #[must_use]
-    pub const fn value_regex(&self) -> Option<&Vec<u8>> {
-        self.value_regex.as_ref()
+    pub const fn value_regex(&self) -> Option<&[u8]> {
+        match self.value_regex.as_ref() {
+            Some(v) => Some(v.as_slice()),
+            None => None,
+        }
     }
 }
 

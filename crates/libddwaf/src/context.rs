@@ -2,8 +2,8 @@ use std::error;
 use std::fmt;
 use std::time::Duration;
 
-use crate::object::WafOwnedOutputAllocator;
 use crate::object::get_default_allocator;
+use crate::object::WafOwnedOutputAllocator;
 use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject};
 
 /// A WAF Context that can be used to evaluate the configured ruleset against address data.
@@ -13,9 +13,18 @@ use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject};
 pub struct Context {
     pub(crate) raw: libddwaf_sys::ddwaf_context,
 }
+
+/// Subcontexts are type of [`Context`] that inherit the data from their parents,
+/// but evaluations do not affect the parent's data.
+///
+/// Subcontexts can outlive their parent contexts.
+///
+/// They are obtained by calling [`Context::new_subcontext`][crate::Context::new_subcontext].
 pub struct Subcontext {
     pub(crate) raw: libddwaf_sys::ddwaf_subcontext,
 }
+
+/// Common waf evaluation interface for [`Context`] and [`Subcontext`].
 pub trait RunnableContext {
     /// Evaluates the configured ruleset against the provided address data, and returns the result
     /// of this evaluation.
@@ -85,10 +94,17 @@ impl RunnableContext for Context {
     }
 }
 impl Context {
-    #[must_use]
-    pub fn create_subcontext(&self) -> Subcontext {
-        Subcontext {
-            raw: unsafe { libddwaf_sys::ddwaf_subcontext_init(self.raw) },
+    /// Creates a new [`Subcontext`] from this [`Context`].
+    ///
+    /// # Errors
+    /// Returns an error if the WAF encountered an internal error while creating the subcontext.
+    /// This will not happen unless there is a bug in the WAF.
+    pub fn new_subcontext(&self) -> Result<Subcontext, InternalError> {
+        let raw = unsafe { libddwaf_sys::ddwaf_subcontext_init(self.raw) };
+        if raw.is_null() {
+            Err(InternalError {})
+        } else {
+            Ok(Subcontext { raw })
         }
     }
 }
@@ -122,7 +138,7 @@ unsafe impl Send for Subcontext {}
 /// Safety: The only method available takes an exclusive borrow.
 unsafe impl Sync for Subcontext {}
 
-/// The result of the [`Context::run`] operation.
+/// The result of the [`RunnableContext::run`] operation.
 #[derive(Debug)]
 pub enum RunResult {
     /// The WAF successfully processed the request, and produced no match.
@@ -132,7 +148,7 @@ pub enum RunResult {
     Match(RunOutput),
 }
 
-/// The error that can occur during a [`Context::run`] operation.
+/// The error that can occur during a [`RunnableContext::run`] operation.
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum RunError {
@@ -153,6 +169,19 @@ impl fmt::Display for RunError {
     }
 }
 impl error::Error for RunError {}
+
+/// An unexpected internal error in the WAF from functions other than [`RunnableContext::run`].
+#[derive(Debug)]
+pub struct InternalError {}
+impl fmt::Display for InternalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "An unexpected internal error occurred in the WAF; check the error logs"
+        )
+    }
+}
+impl error::Error for InternalError {}
 
 /// The data produced by a [`Context::run`] operation.
 #[repr(transparent)]

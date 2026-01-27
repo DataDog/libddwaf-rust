@@ -16,7 +16,7 @@ pub use iter::*;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum WafObjectType {
     /// An invalid value. This can be used as a placeholder to retain the key
-    /// associated with an object that was only aprtially encoded.
+    /// associated with an object that was only partially encoded.
     Invalid,
     /// A signed integer with 64-bit precision.
     Signed,
@@ -192,7 +192,7 @@ impl WafObject {
     /// Returns [`WafObjectType::Invalid`] if the underlying value's type is not set to a
     /// known, valid [`WafObjectType`] value.
     #[must_use]
-    pub fn get_type(&self) -> WafObjectType {
+    pub fn object_type(&self) -> WafObjectType {
         self.as_ref()
             .obj_type()
             .try_into()
@@ -202,7 +202,7 @@ impl WafObject {
     /// Returns a reference to this value as a `T` if its type corresponds.
     #[must_use]
     pub fn as_type<T: TypedWafObject>(&self) -> Option<&T> {
-        if self.get_type() == T::TYPE {
+        if self.object_type() == T::TYPE {
             Some(unsafe { self.as_type_unchecked::<T>() })
         } else {
             None
@@ -219,7 +219,7 @@ impl WafObject {
 
     /// Returns a mutable reference to this value as a `T` if its type corresponds.
     pub fn as_type_mut<T: TypedWafObject>(&mut self) -> Option<&mut T> {
-        if self.get_type() == T::TYPE {
+        if self.object_type() == T::TYPE {
             Some(unsafe { self.as_raw_mut().unchecked_as_ref_mut::<T>() })
         } else {
             None
@@ -230,7 +230,7 @@ impl WafObject {
     /// converted to one of the [`TypedWafObject`] implementations.
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        self.get_type() != WafObjectType::Invalid
+        self.object_type() != WafObjectType::Invalid
     }
 
     /// Returns the value of this [`WafObject`] as a [`u64`] if its type is [`WafObjectType::Unsigned`].
@@ -243,7 +243,7 @@ impl WafObject {
     /// [`WafObjectType::Unsigned`] with a value that can be represented as an [`i64`]).
     #[must_use]
     pub fn to_i64(&self) -> Option<i64> {
-        match self.get_type() {
+        match self.object_type() {
             WafObjectType::Unsigned => {
                 let obj: &WafUnsigned = unsafe { self.as_type_unchecked() };
                 obj.value().try_into().ok()
@@ -287,7 +287,7 @@ impl AsRawMutObject for WafObject {
 }
 impl fmt::Debug for WafObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.get_type() {
+        match self.object_type() {
             WafObjectType::Invalid => write!(f, "WafInvalid"),
             WafObjectType::Unsigned => {
                 let obj: &WafUnsigned = self.as_type().unwrap();
@@ -331,7 +331,7 @@ impl Drop for WafObject {
 }
 impl Clone for WafObject {
     fn clone(&self) -> Self {
-        match self.get_type() {
+        match self.object_type() {
             WafObjectType::Invalid => {
                 let obj: &WafInvalid = unsafe { self.as_type_unchecked() };
                 (*obj).into()
@@ -585,10 +585,10 @@ macro_rules! typed_object {
         impl TryFrom<WafObject> for $name {
             type Error = ObjectTypeError;
             fn try_from(obj: WafObject) -> Result<Self, Self::Error> {
-                if obj.get_type() != Self::TYPE {
+                if obj.object_type() != Self::TYPE {
                     return Err(ObjectTypeError {
                         expected: $type,
-                        actual: obj.get_type(),
+                        actual: obj.object_type(),
                     });
                 }
                 let res = Self { raw: obj.raw };
@@ -1204,7 +1204,6 @@ impl Clone for WafArray {
 
         let layout = Layout::array::<libddwaf_sys::ddwaf_object>(size as usize).unwrap();
         let new_arr: *mut libddwaf_sys::ddwaf_object = unsafe { no_fail_alloc(layout).cast() };
-        unsafe { std::ptr::write_bytes(new_arr, 0, size as usize) };
 
         // Clone each element
         for i in 0..size {
@@ -1513,35 +1512,15 @@ impl<T: AsRawMutObject> Keyed<T> {
             Some(s) => Ok(s.as_bytes()),
             None => Err(ObjectTypeError {
                 expected: WafObjectType::String,
-                actual: key.get_type(),
+                actual: key.object_type(),
             }),
         }
-    }
-
-    pub fn set_key(&mut self, key: impl Into<WafObject>) -> &mut Self {
-        let key = key.into();
-        self.raw.key = key.raw;
-        std::mem::forget(key);
-        self
-    }
-
-    /// Sets the key associated with this [`Keyed<WafObject>`].
-    /// If the key is longer than `u32::MAX` bytes, it will be truncated.
-    pub fn set_key_bytes(&mut self, key: &[u8]) -> &mut Self {
-        let key = WafString::from(key);
-        self.set_key(key)
-    }
-
-    /// Sets the key associated with this [`Keyed<WafObject>`] to the provided string.
-    /// If the key is longer than `u32::MAX` bytes, it will be truncated.
-    pub fn set_key_str(&mut self, key: impl Into<WafString>) -> &mut Self {
-        self.set_key(key.into())
     }
 }
 impl Keyed<WafObject> {
     #[must_use]
     pub fn as_type<T: TypedWafObject>(&self) -> Option<&Keyed<T>> {
-        if self.value().get_type() == T::TYPE {
+        if self.value().object_type() == T::TYPE {
             Some(unsafe { &*(std::ptr::from_ref(self).cast()) })
         } else {
             None
@@ -1549,7 +1528,7 @@ impl Keyed<WafObject> {
     }
 
     pub fn as_type_mut<T: TypedWafObject>(&mut self) -> Option<&mut Keyed<T>> {
-        if self.value().get_type() == T::TYPE {
+        if self.value().object_type() == T::TYPE {
             Some(unsafe { &mut *(std::ptr::from_mut(self).cast()) })
         } else {
             None
@@ -1620,7 +1599,7 @@ impl<T: AsRawMutObject> std::ops::Drop for Keyed<T> {
 impl<T: AsRawMutObject + fmt::Debug> fmt::Debug for Keyed<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let k = self.key();
-        if k.get_type() == WafString::TYPE {
+        if k.object_type() == WafString::TYPE {
             write!(
                 f,
                 "\"{:?}\"={:?}",

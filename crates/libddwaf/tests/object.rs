@@ -5,7 +5,7 @@ use libddwaf::{object::*, waf_array, waf_map, waf_object};
 fn defaults() {
     let obj = WafObject::default();
     assert!(!obj.is_valid());
-    assert_eq!(obj.get_type(), WafObjectType::Invalid);
+    assert_eq!(obj.object_type(), WafObjectType::Invalid);
 
     let obj = WafSigned::default();
     assert!(obj.is_valid());
@@ -183,7 +183,7 @@ fn ddwaf_obj_from_conversions() {
     assert!(obj.to_bool().unwrap());
 
     let obj: WafObject = ().into();
-    assert_eq!(obj.get_type(), WafObjectType::Null);
+    assert_eq!(obj.object_type(), WafObjectType::Null);
 
     let obj: WafObject = "Hello, world!".into();
     assert_eq!(obj.to_str(), Some("Hello, world!"));
@@ -259,9 +259,13 @@ fn keyed_obj_methods() {
     assert_eq!(elem_cast.value().value(), 42u64);
 
     assert!(elem.as_type_mut::<WafBool>().is_none());
+
     let elem_cast = elem.as_type_mut::<WafUnsigned>().unwrap();
-    elem_cast.set_key_str("key 2");
-    assert_eq!(elem_cast.key_str().unwrap(), "key 2");
+    assert_eq!(elem_cast.value().value(), 42u64);
+
+    let key_mut = elem.key_mut();
+    let _ = std::mem::replace(key_mut, "key 2".into());
+    assert_eq!(elem.key_str().unwrap(), "key 2");
 }
 
 #[test]
@@ -271,7 +275,9 @@ fn map_fetching_methods() {
     // index
     assert_eq!(map[0].key_bytes().unwrap(), b"key1");
     // index mut
-    map[0].set_key_bytes(b"new key");
+    let key_mut = map[0].key_mut();
+    let new_key = WafString::from(b"new key");
+    let _ = std::mem::replace(key_mut, new_key.into());
     assert_eq!(map[0].key_bytes().unwrap(), b"new key");
 
     // get
@@ -290,7 +296,9 @@ fn map_fetching_methods() {
     );
 
     // get_mut
-    map.get_mut(b"key2").unwrap().set_key_str("key3");
+    let key_mut = map.get_mut(b"key2").unwrap().key_mut();
+    let new_key = WafString::from(b"key3");
+    let _ = std::mem::replace(key_mut, new_key.into());
     let entry_k3 = map.get_str_mut("key3").unwrap();
     let new_entry: Keyed<WafUnsigned> = ("key3", 3u64).into();
     let _ = std::mem::replace(entry_k3, new_entry.into());
@@ -299,7 +307,9 @@ fn map_fetching_methods() {
     assert!(map.get_mut(b"bad key").is_none());
 
     // get_str_mut
-    map.get_str_mut("key3").unwrap().set_key_bytes(b"key4");
+    let key_mut = map.get_str_mut("key3").unwrap().key_mut();
+    let new_key = WafString::from(b"key4");
+    let _ = std::mem::replace(key_mut, new_key.into());
     assert_eq!(map.get_str("key4").unwrap().to_u64().unwrap(), 3);
 
     assert!(map.get_str_mut("bad key").is_none());
@@ -314,7 +324,7 @@ fn array_iteration() {
             0 => assert_eq!(elem.to_u64().unwrap(), 1),
             1 => assert_eq!(elem.to_str().unwrap(), "foo"),
             2 => assert_eq!(elem.as_type::<WafArray>().unwrap().len(), 1),
-            3 => assert_eq!(elem.get_type(), WafObjectType::Null),
+            3 => assert_eq!(elem.object_type(), WafObjectType::Null),
             _ => unreachable!(),
         }
     }
@@ -328,7 +338,7 @@ fn array_iteration() {
                 let _ = std::mem::replace(elem, new_str.into());
             }
             2 => assert_eq!(elem.as_type::<WafArray>().unwrap().len(), 1),
-            3 => assert_eq!(elem.get_type(), WafObjectType::Null),
+            3 => assert_eq!(elem.object_type(), WafObjectType::Null),
             _ => unreachable!(),
         }
     }
@@ -339,7 +349,7 @@ fn array_iteration() {
             0 => assert_eq!(elem.to_u64().unwrap(), 1),
             1 => assert_eq!(elem.to_str().unwrap(), "bar"),
             2 => assert_eq!(elem.as_type::<WafArray>().unwrap().len(), 1),
-            3 => assert_eq!(elem.get_type(), WafObjectType::Null),
+            3 => assert_eq!(elem.object_type(), WafObjectType::Null),
             _ => unreachable!(),
         }
     }
@@ -370,7 +380,7 @@ fn map_iteration() {
             }
             3 => {
                 assert_eq!(elem.key_str().unwrap(), "key4");
-                assert_eq!(elem.get_type(), WafObjectType::Null);
+                assert_eq!(elem.object_type(), WafObjectType::Null);
             }
             _ => unreachable!(),
         }
@@ -409,14 +419,14 @@ fn map_iteration() {
 fn partial_iteration() {
     let arr = waf_array!(1u64, "foo");
     for elem in arr {
-        if elem.get_type() == WafObjectType::Unsigned {
+        if elem.object_type() == WafObjectType::Unsigned {
             break;
         }
     }
 
     let map = waf_map!(("key1", 1u64), ("key2", "foo"));
     for elem in map {
-        if elem.get_type() == WafObjectType::Unsigned {
+        if elem.object_type() == WafObjectType::Unsigned {
             break;
         }
     }
@@ -706,7 +716,7 @@ fn test_array_from_large_slice_truncates() {
     // After From<&mut [T]>, the first u16::MAX elements in the vec are taken (replaced with default)
     // The element at index 65535 (the excess one) should still exist
     assert_eq!(large_vec.len(), EXCESS_SIZE);
-    assert_eq!(large_vec[0].get_type(), WafObjectType::Invalid);
+    assert_eq!(large_vec[0].object_type(), WafObjectType::Invalid);
     assert_eq!(large_vec[65535].to_u64().unwrap(), 65535);
 }
 
@@ -751,8 +761,8 @@ fn test_map_from_large_slice_truncates() {
     assert_eq!(map.get_str("key65534").unwrap().to_u64().unwrap(), 65534);
 
     assert_eq!(large_vec.len(), EXCESS_SIZE);
-    assert_eq!(large_vec[0].0.get_type(), WafObjectType::Invalid);
-    assert_eq!(large_vec[0].1.get_type(), WafObjectType::Invalid);
+    assert_eq!(large_vec[0].0.object_type(), WafObjectType::Invalid);
+    assert_eq!(large_vec[0].1.object_type(), WafObjectType::Invalid);
     assert_eq!(large_vec[65535].0.to_str().unwrap(), "key65535");
     assert_eq!(large_vec[65535].1.to_u64().unwrap(), 65535);
 }

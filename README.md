@@ -40,6 +40,10 @@ useful to reduce the stat-up overhead in case the `libddwaf` features are not al
 features are opt-in); but it increases the size of the final binary & decreases overall performance of using those
 functions (due to their being dynamically dispatched).
 
-### `dynamic-link``
+### `dynamic-link`
 Mutually exclusive with `dynamic`. Plain dynamic linking against the shared `libddwaf` library. The library (called
 `libddwaf.so` on Linux) must be available at runtime through the usual mechanisms of the dynamic linker.
+
+### `link-stdcxx`
+Used to control linking against libstdc++ in Linux; needed under some limited circumstances such as with non-official
+builds of libddwaf. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more details.
