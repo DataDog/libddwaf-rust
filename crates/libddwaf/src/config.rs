@@ -74,15 +74,9 @@ impl Obfuscator {
     }
 }
 
-/// The regular expression used by [`Obfuscator::default`] to determine which key data to obfuscate.
-pub const OBFUSCATOR_DEFAULT_KEY_REGEX: &str = r"(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt";
-/// The regular expression used by [`Obfuscator::default`] to determine which value data to obfuscate.
-pub const OBFUSCATOR_DEFAULT_VAL_REGEX: &str = r#"(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})"#;
 impl Default for Obfuscator {
     fn default() -> Self {
-        Obfuscator::new(
-            Some(OBFUSCATOR_DEFAULT_KEY_REGEX),
-            Some(OBFUSCATOR_DEFAULT_VAL_REGEX),
-        )
+        // This actually uses the default regexes from libddwaf
+        Obfuscator::new(None::<&str>, None::<&str>)
     }
 }
