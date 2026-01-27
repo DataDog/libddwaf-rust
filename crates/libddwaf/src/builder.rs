@@ -50,7 +50,7 @@ impl Builder {
         &mut self,
         path: &str,
         ruleset: &impl AsRef<libddwaf_sys::ddwaf_object>,
-        diagnostics: Option<&mut WafOwnedDefaultAllocator<WafMap>>,
+        mut diagnostics: Option<&mut WafOwnedDefaultAllocator<WafMap>>,
     ) -> bool {
         debug_assert!(
             !path.is_empty(),
@@ -61,6 +61,10 @@ impl Builder {
             )
         );
         let path_len = u32::try_from(path.len()).expect("path is too long");
+        if let Some(ref mut diagnostics) = diagnostics {
+            // drop the old diagnostics if we're reusing it
+            let _ = std::mem::take(*diagnostics);
+        }
         unsafe {
             libddwaf_sys::ddwaf_builder_add_or_update_config(
                 self.raw,

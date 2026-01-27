@@ -34,7 +34,7 @@ format_check:
 .PHONY: format_check
 
 leak_check:
-	RUSTFLAGS="-Zsanitizer=leak" cargo +nightly test --all-targets --target-dir target/leak_check
+	RUSTFLAGS="-Zsanitizer=leak" LSAN_OPTIONS="symbolize=1:external_symbolizer_path=/usr/bin/addr2line" cargo +nightly test --all-targets --target-dir target/leak_check
 .PHONY: leak_check
 
 Cargo.lock: Cargo.toml
