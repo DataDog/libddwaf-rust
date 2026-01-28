@@ -10,7 +10,8 @@ RUN curl https://sh.rustup.rs -sSf |                                            
 
 ENV PATH="/root/.cargo/bin:$PATH"
 
-ENV RUSTFLAGS="-Clinker=clang -Clink-arg=-L/usr/lib64/clang/11.1.0/lib"
+ENV RUSTC_LOG=rustc_codegen_ssa::back::link=debug
+
 RUN --mount=type=bind,source=.,target=/workspace/src,rw                                             \
     --mount=type=cache,target=/workspace/src/target,rw                                              \
     --mount=type=cache,target=/root/.cargo/git                                                      \
@@ -18,5 +19,5 @@ RUN --mount=type=bind,source=.,target=/workspace/src,rw                         
     cd /workspace/src &&                                                                            \
     clang_rt_lib="clang_rt.builtins-$(uname -m)" &&                                                 \
     clang_rt_lib_dir=$(dirname $(clang --print-file-name="lib${clang_rt_lib}.a")) &&                \
-    export RUSTFLAGS="${RUSTFLAGS} -Clinker=clang -L${clang_rt_lib_dir} -l${clang_rt_lib}" &&       \
-    make test
+    export RUSTFLAGS="-Clinker=clang -Clink-arg=-L${clang_rt_lib_dir} -Clink-arg=-l${clang_rt_lib}" && \
+    RUSTDOCFLAGS="$RUSTFLAGS" make test

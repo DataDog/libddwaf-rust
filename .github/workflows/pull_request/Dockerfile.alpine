@@ -1,6 +1,6 @@
 FROM alpine:3.22.0
 
-RUN apk add --no-cache curl make build-base clang clang-libclang musl-dev
+RUN apk add --no-cache curl make build-base clang clang-libclang musl-dev compiler-rt
 
 RUN curl https://sh.rustup.rs -sSf |                                            \
     sh -s -- --profile minimal                                                  \
@@ -8,13 +8,14 @@ RUN curl https://sh.rustup.rs -sSf |                                            
 
 ENV PATH=/root/.cargo/bin:$PATH
 
+ENV RUSTC_LOG=rustc_codegen_ssa::back::link=debug
+
 RUN --mount=type=bind,source=.,target=/workspace/src,rw                         \
     --mount=type=cache,target=/workspace/src/target,rw                          \
     --mount=type=cache,target=/root/.cargo/git                                  \
     --mount=type=cache,target=/root/.cargo/registry                             \
     cd /workspace/src &&                                                        \
-    if [ "$(uname -m)" = "x86_64" ]; then                                       \
-        clang --print-libgcc-file-name &&                                       \
-        export RUSTFLAGS="-Clinker=clang -Cdefault-linker-libraries";           \
-    fi &&                                                                       \
-    RUSTC_WRAPPER=/workspace/src/.cargo/musl.rustc-wrapper make test
+    clang_rt_lib="clang_rt.builtins-$(uname -m)" &&                             \
+    clang_rt_lib_dir=$(dirname $(clang --print-file-name="lib${clang_rt_lib}.a")) && \
+    export RUSTFLAGS="-Clinker=clang -Clink-arg=-L${clang_rt_lib_dir} -Clink-arg=-l${clang_rt_lib}" && \
+    RUSTDOCFLAGS="$RUSTFLAGS" RUSTC_WRAPPER=/workspace/src/.cargo/musl.rustc-wrapper make test

@@ -2,8 +2,8 @@ use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufRead};
-use std::path::PathBuf;
-use std::process::{Command, exit};
+use std::path::{Path, PathBuf};
+use std::process::{exit, Command};
 
 use flate2::read::GzDecoder;
 use reqwest::blocking::get;
@@ -11,6 +11,15 @@ use tar::Archive;
 
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+    let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
+    let feature_dynamic_link = env::var("CARGO_FEATURE_DYNAMIC_LINK").is_ok();
+
+    if feature_dynamic && feature_dynamic_link {
+        panic!(
+            "The `dynamic` and `dynamic-link` features are mutually exclusive. Please enable only one."
+        );
+    }
 
     if cfg!(target_env = "musl") && cfg!(target_feature = "crt-static") {
         println!(
@@ -43,6 +52,119 @@ fn main() {
     let version =
         env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION environment variable not set");
 
+    // Check if a custom libddwaf installation prefix is provided
+    let (include_dir, lib_dir, soname) = if let Some(prefix) = env::var_os("LIBDDWAF_PREFIX") {
+        from_installed_libddwaf(&prefix)
+    } else {
+        from_github_release(&version, &out_dir)
+    };
+    println!("cargo::rerun-if-env-changed=LIBDDWAF_PREFIX");
+
+    // Add library search path and link directive
+    println!(
+        "cargo::rustc-link-search=native={}",
+        lib_dir.to_str().unwrap()
+    );
+    if feature_dynamic_link {
+        println!("cargo::rustc-link-lib=dylib=ddwaf");
+    } else if !feature_dynamic {
+        println!("cargo::rustc-link-lib=static=ddwaf");
+    }
+
+    // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a/.so.
+    // Linux needs to link against libstdc++ for C++ standard library symbols
+    // This can be controlled via the `link-stdcxx` feature
+    // Note: We check the TARGET environment variable, not cfg!(target_os), because
+    // cfg! evaluates for the build script's host, not the cross-compilation target
+    let target = env::var("TARGET").expect("TARGET environment variable not set");
+    if target.contains("apple") || target.contains("darwin") {
+        println!("cargo::rustc-link-lib=c++");
+    } else if target.contains("linux") && env::var("CARGO_FEATURE_LINK_STDCXX").is_ok() {
+        println!("cargo::rustc-link-lib=static=stdc++");
+    }
+
+    // if we want to disable this in final binaries, see maybe
+    // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
+    println!(
+        "cargo::rustc-link-arg=-Wl,-rpath,{}",
+        lib_dir.to_str().unwrap()
+    );
+
+    #[cfg(target_os = "linux")]
+    println!("cargo::rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    #[cfg(target_os = "macos")]
+    println!("cargo::rustc-link-arg=-Wl,-rpath,@loader_path");
+
+    // Generate bindings with bindgen
+    let builder = bindgen::Builder::default()
+        .header(include_dir.join("ddwaf.h").to_str().unwrap())
+        .clang_arg(format!("-I{}", include_dir.to_str().unwrap()))
+        .default_visibility(bindgen::FieldVisibilityKind::Public)
+        .derive_default(true)
+        .prepend_enum_name(false)
+        // Specifically allow-list supported/useful functions to avoid bloat.
+        .allowlist_function("^ddwaf_.*");
+    let builder = if feature_dynamic {
+        let filename = out_dir.join(format!("{soname}.zst"));
+        let zstd_file = File::create(&filename).expect("failed to create zstd file");
+        let mut zstd = zstd::Encoder::new(zstd_file, 22).expect("failed to create zstd encoder");
+
+        let mut so = File::open(lib_dir.join(soname)).expect("failed to open shared object file");
+        io::copy(&mut so, &mut zstd).expect("failed to write compressed shared object file");
+        zstd.finish().expect("failed to finish zstd compression");
+
+        println!(
+            "cargo::rustc-env=LIBDDWAF_SHARED_OBJECT.zst={}",
+            filename.display()
+        );
+
+        builder
+            .dynamic_library_name("ddwaf")
+            .dynamic_link_require_all(true)
+    } else {
+        builder
+    };
+    let bindings = builder.generate().expect("Failed to generate bindings");
+
+    // Write the bindings to the output directory
+    let bindings_out_path = out_dir.join("bindings.rs");
+    bindings
+        .write_to_file(bindings_out_path)
+        .expect("Failed to write bindings.rs");
+
+    println!("cargo::rerun-if-changed=build.rs");
+}
+
+fn from_installed_libddwaf(prefix: impl AsRef<OsStr>) -> (PathBuf, PathBuf, &'static str) {
+    println!(
+        "cargo::warning=Using libddwaf installation from prefix: {:?}",
+        prefix.as_ref()
+    );
+    let prefix_path = PathBuf::from(prefix.as_ref());
+    let include_dir = prefix_path.join("include");
+    let lib_dir = prefix_path.join("lib");
+
+    // Validate that the directories exist
+    if !include_dir.exists() {
+        panic!("Include directory not found at {}", include_dir.display());
+    }
+    if !lib_dir.exists() {
+        panic!("Library directory not found at {}", lib_dir.display());
+    }
+
+    // Determine the shared library name based on the target platform
+    let soname = if cfg!(target_os = "macos") {
+        "libddwaf.dylib"
+    } else {
+        "libddwaf.so"
+    };
+
+    (include_dir, lib_dir, soname)
+}
+
+fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'static str) {
+    // Download and extract libddwaf from GitHub releases
+
     // Target triple for the current build
     let target = env::var("TARGET").expect("TARGET environment variable not set");
 
@@ -51,10 +173,6 @@ fn main() {
     let include_dir = download_dir.join("include");
     let lib_dir = download_dir.join("lib");
 
-    // Check if the `dynamic` feature is enabled.
-    let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
-
-    // Download the archive
     let (archive, soname, is_override) = {
         // Base URL for downloading the library
         let base_url = "https://github.com/DataDog/libddwaf/releases/download";
@@ -169,75 +287,7 @@ fn main() {
         panic!("Failed to extract include and lib directories");
     }
 
-    // Add library search path and link directive
-    println!(
-        "cargo::rustc-link-search=native={}",
-        lib_dir.to_str().unwrap()
-    );
-    if !feature_dynamic {
-        println!("cargo::rustc-link-lib=static=ddwaf");
-    }
-
-    // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a/.so.
-    #[cfg(target_os = "macos")]
-    println!("cargo::rustc-link-lib=c++");
-
-    // if we want to disable this in final binaries, see maybe
-    // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
-    println!(
-        "cargo::rustc-link-arg=-Wl,-rpath,{}",
-        lib_dir.to_str().unwrap()
-    );
-
-    #[cfg(target_os = "linux")]
-    println!("cargo::rustc-link-arg=-Wl,-rpath,$ORIGIN");
-    #[cfg(target_os = "macos")]
-    println!("cargo::rustc-link-arg=-Wl,-rpath,@loader_path");
-
-    // Generate bindings with bindgen
-    let builder = bindgen::Builder::default()
-        .header(include_dir.join("ddwaf.h").to_str().unwrap())
-        .clang_arg(format!("-I{}", include_dir.to_str().unwrap()))
-        .default_visibility(bindgen::FieldVisibilityKind::Public)
-        .derive_default(true)
-        .prepend_enum_name(false)
-        // Specifically allow-list supported/useful functions to avoid bloat.
-        .allowlist_function("^ddwaf_(get_version|set_log_cb)$")
-        .allowlist_function("^ddwaf_(destroy|known_(addresses|actions))$")
-        .allowlist_function("^ddwaf_(context_(init|destroy)|run)$")
-        .allowlist_function("^ddwaf_builder_(init|add_or_update_config|remove_config|build_instance|get_config_paths|destroy)$")
-        .allowlist_function(
-            "^ddwaf_object_(array|bool|float|free|from_json|invalid|map|null|signed|stringl|unsigned)$",
-        );
-    let builder = if feature_dynamic {
-        let filename = download_dir.join(format!("{soname}.zst"));
-        let zstd_file = File::create(&filename).expect("failed to create zstd file");
-        let mut zstd = zstd::Encoder::new(zstd_file, 22).expect("failed to create zstd encoder");
-
-        let mut so = File::open(lib_dir.join(soname)).expect("failed to open shared object file");
-        io::copy(&mut so, &mut zstd).expect("failed to write compressed shared object file");
-        zstd.finish().expect("failed to finish zstd compression");
-
-        println!(
-            "cargo::rustc-env=LIBDDWAF_SHARED_OBJECT.zst={}",
-            filename.display()
-        );
-
-        builder
-            .dynamic_library_name("ddwaf")
-            .dynamic_link_require_all(true)
-    } else {
-        builder
-    };
-    let bindings = builder.generate().expect("Failed to generate bindings");
-
-    // Write the bindings to the output directory
-    let bindings_out_path = out_dir.join("bindings.rs");
-    bindings
-        .write_to_file(bindings_out_path)
-        .expect("Failed to write bindings.rs");
-
-    println!("cargo::rerun-if-changed=build.rs");
+    (include_dir, lib_dir, soname)
 }
 
 /// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.

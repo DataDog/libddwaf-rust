@@ -28,10 +28,11 @@
 //!     waf_map,
 //!     Builder,
 //!     Config,
+//!     RunnableContext,
 //!     RunResult,
 //! };
 //!
-//! let mut builder = Builder::new(&Config::default())
+//! let mut builder = Builder::new(Some(&Config::default()))
 //!     .expect("Failed to build WAF instance");
 //! let rule_set = waf_map!{
 //!     /* Typically obtained by parsing a rules file using the serde feature */
@@ -49,7 +50,7 @@
 //!         ("on_match", waf_array!{ "block" })
 //!     } }),
 //! };
-//! let mut diagnostics = WafOwned::<WafMap>::default();
+//! let mut diagnostics = WafOwnedDefaultAllocator::<WafMap>::default();
 //! if !builder.add_or_update_config("config/file/logical/path", &rule_set, Some(&mut diagnostics)) {
 //!     panic!("Failed to add or update config!");
 //! }
@@ -60,7 +61,7 @@
 //! let data = waf_map!{
 //!     ("arg1", "value1"),
 //! };
-//! match waf_ctx.run(Some(data), None, std::time::Duration::from_millis(1)) {
+//! match waf_ctx.run(data, std::time::Duration::from_millis(1)) {
 //!     // Deal with the result as appropriate...
 //!     Ok(RunResult::Match(res)) => {
 //!         assert!(!res.timeout());
@@ -88,7 +89,7 @@ macro_rules! forward {
     ($($name:ident),*) => {
         $(
             mod $name;
-            #[doc(inline = true)]
+            #[doc(inline)]
             pub use $name::*;
         )*
     };
@@ -98,7 +99,7 @@ forward!(builder, config, context, handle);
 
 /// Returns the version of the underlying `libddwaf` library.
 #[must_use]
-pub fn get_version() -> &'static CStr {
+pub fn version() -> &'static CStr {
     let ptr = unsafe { libddwaf_sys::ddwaf_get_version() };
     if ptr.is_null() {
         unsafe { CStr::from_ptr("\0".as_ptr().cast()) }
@@ -109,13 +110,19 @@ pub fn get_version() -> &'static CStr {
 
 #[cfg(test)]
 mod tests {
-    use crate::get_version;
-
     #[test]
-    fn test_get_version() {
+    #[cfg(not(miri))]
+    fn test_version() {
+        use crate::version;
+
+        if std::env::var("LIBDDWAF_PREFIX").is_ok() {
+            eprintln!("Skipping test_get_version: LIBDDWAF_PREFIX is set");
+            return;
+        }
+
         assert_eq!(
             env!("CARGO_PKG_VERSION"),
-            get_version()
+            version()
                 .to_str()
                 .expect("Failed to convert version to str")
         );

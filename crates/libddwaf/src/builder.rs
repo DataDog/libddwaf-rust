@@ -1,6 +1,6 @@
 use std::ptr::null_mut;
 
-use crate::object::{AsRawMutObject, WafArray, WafMap, WafOwned};
+use crate::object::{AsRawMutObject, WafArray, WafMap, WafOwnedDefaultAllocator};
 use crate::{Config, Handle};
 
 /// A builder for [`Handle`]s.
@@ -13,16 +13,28 @@ pub struct Builder {
     raw: libddwaf_sys::ddwaf_builder,
 }
 impl Builder {
+    const OBFUSCATOR_KEY: &str = "datadog/0/ASM_DD/0/config";
+
     /// Creates a new [`Builder`] instance using the provided [`Config`]. Returns [`None`] if the
     /// builder's initialization fails.
     #[must_use]
-    pub fn new(config: &Config) -> Option<Self> {
-        let builder = Builder {
-            raw: unsafe { libddwaf_sys::ddwaf_builder_init(&raw const config.raw) },
+    pub fn new(config: Option<&Config>) -> Option<Self> {
+        let mut builder = Builder {
+            raw: unsafe { libddwaf_sys::ddwaf_builder_init() },
         };
         if builder.raw.is_null() {
             return None;
         }
+
+        if let Some(config) = config {
+            let config_obj = config.as_waf_object();
+            let res = builder.add_or_update_config(Self::OBFUSCATOR_KEY, &config_obj, None);
+            if !res {
+                debug_assert!(false, "Failed to add or update obfuscator config");
+                return None;
+            }
+        }
+
         Some(builder)
     }
 
@@ -38,7 +50,7 @@ impl Builder {
         &mut self,
         path: &str,
         ruleset: &impl AsRef<libddwaf_sys::ddwaf_object>,
-        diagnostics: Option<&mut WafOwned<WafMap>>,
+        mut diagnostics: Option<&mut WafOwnedDefaultAllocator<WafMap>>,
     ) -> bool {
         debug_assert!(
             !path.is_empty(),
@@ -49,6 +61,10 @@ impl Builder {
             )
         );
         let path_len = u32::try_from(path.len()).expect("path is too long");
+        if let Some(ref mut diagnostics) = diagnostics {
+            // drop the old diagnostics if we're reusing it
+            let _ = std::mem::take(*diagnostics);
+        }
         unsafe {
             libddwaf_sys::ddwaf_builder_add_or_update_config(
                 self.raw,
@@ -98,8 +114,9 @@ impl Builder {
     /// # Panics
     /// Panics if the provided `filter` regular expression is longer than [`u32::MAX`] bytes.
     #[must_use]
-    pub fn config_paths(&mut self, filter: Option<&'_ str>) -> WafOwned<WafArray> {
-        let mut res = WafOwned::<WafArray>::default();
+    pub fn config_paths(&mut self, filter: Option<&'_ str>) -> WafOwnedDefaultAllocator<WafArray> {
+        // SAFETY: ddwaf_builder_get_config_paths uses the default allocator
+        let mut res = WafOwnedDefaultAllocator::<WafArray>::default();
         let filter = filter.unwrap_or("");
         let filter_len = u32::try_from(filter.len()).expect("filter is too long");
         let _ = unsafe {

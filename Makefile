@@ -1,9 +1,14 @@
-check: test clippy format_check
+check: test miri clippy format_check
 .PHONY: check
 
 test:
 	cargo test --all-targets
+	cargo test --doc
 .PHONY: test
+
+miri:
+	cargo +nightly miri test --lib --tests
+.PHONY: miri
 
 coverage:
 	cargo +nightly llvm-cov test --all-targets --branch --quiet --lcov --output-path=target/lcov.info \
@@ -27,6 +32,10 @@ clippy:
 format_check:
 	cargo fmt -- --check
 .PHONY: format_check
+
+leak_check:
+	RUSTFLAGS="-Zsanitizer=leak" LSAN_OPTIONS="symbolize=1:external_symbolizer_path=/usr/bin/addr2line" cargo +nightly test --all-targets --target-dir target/leak_check
+.PHONY: leak_check
 
 Cargo.lock: Cargo.toml
 	cargo check

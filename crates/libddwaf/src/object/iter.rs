@@ -1,15 +1,18 @@
 use std::alloc::Layout;
-use std::ptr::null_mut;
 
-use crate::object::{AsRawMutObject, Keyed, WafArray, WafMap, WafObject};
+use crate::object::{Keyed, WafArray, WafMap, WafObject};
 
 impl IntoIterator for WafArray {
     type Item = WafObject;
     type IntoIter = WafIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let array: *mut Self::Item = unsafe { self.raw.__bindgen_anon_1.array.cast() };
-        let len = if array.is_null() { 0 } else { self.len() };
+        let array: *mut Self::Item = unsafe { self.raw.via.array.ptr.cast() };
+        let len = if array.is_null() {
+            0
+        } else {
+            self.len() as usize
+        };
         // Forget about self, since the iterator is now the owner of the memory.
         std::mem::forget(self);
         WafIter { array, len, pos: 0 }
@@ -21,16 +24,7 @@ impl IntoIterator for Keyed<WafArray> {
     type IntoIter = WafIter<Self::Item>;
 
     fn into_iter(mut self) -> Self::IntoIter {
-        let mut arr = std::mem::take(&mut self.value);
-
-        // We're stopping the destructor from [`Keyed`] from running, so we need to explicitly
-        // drop the key from the value, or we'd be leaking it.
-        let raw_obj = unsafe { AsRawMutObject::as_raw_mut(&mut arr) };
-        unsafe { raw_obj.drop_key() };
-        raw_obj.parameterName = null_mut();
-        raw_obj.parameterNameLength = 0;
-
-        // Finally delegate back to the [`WafArray`] implementation.
+        let arr = std::mem::take(self.value_mut());
         arr.into_iter()
     }
 }
@@ -40,8 +34,12 @@ impl IntoIterator for WafMap {
     type IntoIter = WafIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let array: *mut Keyed<WafObject> = unsafe { self.raw.__bindgen_anon_1.array.cast() };
-        let len = if array.is_null() { 0 } else { self.len() };
+        let array: *mut Keyed<WafObject> = unsafe { self.raw.via.map.ptr.cast() };
+        let len = if array.is_null() {
+            0
+        } else {
+            self.len() as usize
+        };
         // Forget about self, since the iterator is now the owner of the memory.
         std::mem::forget(self);
         WafIter { array, len, pos: 0 }
@@ -53,16 +51,7 @@ impl IntoIterator for Keyed<WafMap> {
     type IntoIter = WafIter<Self::Item>;
 
     fn into_iter(mut self) -> Self::IntoIter {
-        let mut arr = std::mem::take(&mut self.value);
-
-        // We're stopping the destructor from [Keyed] from running, so we need to explicitly
-        // drop the key from the value, or we'd be leaking it.
-        let raw_obj = unsafe { AsRawMutObject::as_raw_mut(&mut arr) };
-        unsafe { raw_obj.drop_key() };
-        raw_obj.parameterName = null_mut();
-        raw_obj.parameterNameLength = 0;
-
-        // Finally delegate back to the [WafMap] implementation.
+        let arr = std::mem::take(self.value_mut());
         arr.into_iter()
     }
 }

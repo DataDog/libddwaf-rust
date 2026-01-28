@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use crate::Context;
+use crate::{Context, object::get_default_allocator};
 
 /// A fully configured WAF instance.
 ///
@@ -15,8 +15,9 @@ impl Handle {
     #[must_use]
     pub fn new_context(&self) -> Context {
         Context {
-            raw: unsafe { libddwaf_sys::ddwaf_context_init(self.raw) },
-            keepalive: Vec::new(),
+            raw: unsafe {
+                libddwaf_sys::ddwaf_context_init(self.raw, get_default_allocator().into())
+            },
         }
     }
 

@@ -32,7 +32,11 @@ zstd = "0.13"
 [features]
 default = []
 fips = ["hyper-rustls/fips", "rustls/fips"]
+# Embeds a compressed libddwaf.so and extracts it to a temporary file at runtime, then loads it with libloading/dlopen
 dynamic = ["lazy_static", "libloading", "tempfile", "tracing", "zstd"]
+# Links to libddwaf.so dynamically via the system dynamic linker and rpath (simpler, requires library at runtime)
+dynamic-link = []
+link-stdcxx = []
 
 [lints]
 workspace = true
