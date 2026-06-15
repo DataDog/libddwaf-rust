@@ -47,6 +47,44 @@ static ARACHNI_RULE: LazyLock<WafMap> = LazyLock::new(|| {
     }
 });
 
+static SPLIT_ADDRESS_RULE: LazyLock<WafMap> = LazyLock::new(|| {
+    waf_map! {
+        ("version", "2.1"),
+        ("rules", waf_array![
+            waf_map!{
+                ("id", "split_address_rule"),
+                ("name", "Block when inputs are spread across batches"),
+                ("tags", waf_map!{ ("category", "attack_attempt"), ("type", "security_scanner") }),
+                ("conditions", waf_array![
+                    waf_map!{
+                        ("operator", "match_regex"),
+                        ("parameters", waf_map!{
+                            ("inputs", waf_array![
+                                waf_map!{
+                                    ("address", "test.first"),
+                                },
+                            ]),
+                            ("regex", "first-value"),
+                        }),
+                    },
+                    waf_map!{
+                        ("operator", "match_regex"),
+                        ("parameters", waf_map!{
+                            ("inputs", waf_array![
+                                waf_map!{
+                                    ("address", "test.second"),
+                                },
+                            ]),
+                            ("regex", "second-value"),
+                        }),
+                    },
+                ]),
+                ("on_match", waf_array!["block"])
+            },
+        ]),
+    }
+});
+
 #[test]
 fn basic_run_rule_with_match() {
     let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
@@ -86,6 +124,7 @@ fn basic_run_rule_with_match() {
             assert!(!result.timeout());
             assert!(result.keep());
             assert!(result.duration() > Duration::default());
+            assert_eq!(result.evaluated(), 1);
 
             let events = result.events().expect("Expected some events");
             assert_eq!(events.len(), 1);
@@ -145,6 +184,7 @@ fn basic_run_rule_with_no_match() {
             assert!(!result.timeout());
             assert!(!result.keep());
             assert!(result.duration() > Duration::default());
+            assert_eq!(result.evaluated(), 1);
 
             if let Some(events) = result.events() {
                 assert!(events.is_empty());
@@ -155,6 +195,67 @@ fn basic_run_rule_with_no_match() {
             if let Some(attributes) = result.attributes() {
                 assert!(attributes.is_empty());
             }
+        }
+        _ => {
+            panic!("Unexpected result: {res:?}");
+        }
+    }
+}
+
+#[test]
+fn run_batches_context_matches_across_batches() {
+    let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
+    assert!(builder.add_or_update_config("rules", LazyLock::force(&SPLIT_ADDRESS_RULE), None));
+    let waf = builder.build().unwrap();
+    let mut ctx = waf.new_context();
+
+    let data = waf_array![
+        waf_map!(("test.first", "first-value")),
+        waf_map!(("test.second", "second-value")),
+    ];
+
+    let res = ctx.run_batches(data, Duration::from_secs(1));
+
+    assert_split_address_match(res);
+}
+
+#[test]
+fn run_batches_subcontext_matches_across_batches() {
+    let mut builder = Builder::new(Some(&Config::default())).expect("Failed to create builder");
+    assert!(builder.add_or_update_config("rules", LazyLock::force(&SPLIT_ADDRESS_RULE), None));
+    let waf = builder.build().unwrap();
+    let ctx = waf.new_context();
+    let mut subctx = ctx.new_subcontext().unwrap();
+
+    let data = waf_array![
+        waf_map!(("test.first", "first-value")),
+        waf_map!(("test.second", "second-value")),
+    ];
+
+    let res = subctx.run_batches(data, Duration::from_secs(1));
+
+    assert_split_address_match(res);
+}
+
+fn assert_split_address_match(res: Result<RunResult, libddwaf::RunError>) {
+    match res {
+        Ok(RunResult::Match(result)) => {
+            assert!(!result.timeout());
+            assert!(result.keep());
+            assert_eq!(result.evaluated(), 2);
+
+            let events = result.events().expect("Expected some events");
+            assert_eq!(events.len(), 1);
+            let first_event: &WafMap = events[0].as_type().unwrap();
+            let rule_first_event: &WafMap = first_event.get_str("rule").unwrap().as_type().unwrap();
+            assert_eq!(
+                rule_first_event.get_str("id").unwrap().to_str().unwrap(),
+                "split_address_rule"
+            );
+
+            let actions = result.actions().expect("Expected some actions");
+            assert_eq!(actions.len(), 1);
+            assert!(actions.get_bstr(b"block_request").is_some());
         }
         _ => {
             panic!("Unexpected result: {res:?}");
@@ -251,6 +352,7 @@ fn test_run_output_debug() {
             assert!(debug_str.contains("timeout"));
             assert!(debug_str.contains("keep"));
             assert!(debug_str.contains("duration"));
+            assert!(debug_str.contains("evaluated"));
         }
         other => panic!("Expected match result, got: {other:?}"),
     }
