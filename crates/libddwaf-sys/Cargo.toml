@@ -15,7 +15,7 @@ links = "ddwaf"
 [dependencies]
 lazy_static = { version = "1.5", optional = true }
 libc = "0.2"
-libloading = { version = "0.8", optional = true }
+libloading = { version = "0.9", optional = true }
 tempfile = { version = "3", optional = true }
 tracing = { version = "0.1", optional = true }
 zstd = { version = "0.13", optional = true }
