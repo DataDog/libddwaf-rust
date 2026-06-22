@@ -1,2 +1,5 @@
 [env]
 MACOSX_DEPLOYMENT_TARGET = '12.7'
+
+[resolver]
+incompatible-rust-versions = "fallback"

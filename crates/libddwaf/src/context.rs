@@ -33,6 +33,16 @@ pub trait RunnableContext {
     /// Returns an error if the WAF encountered an internal error, invalid object, or invalid argument while processing
     /// the request.
     fn run(&mut self, data: WafMap, timeout: Duration) -> Result<RunResult, RunError>;
+
+    /// Evaluates multiple batches of address data in sequence, and returns a combined result.
+    ///
+    /// Each element in `data` must be a [`WafMap`] containing address data. Addresses from earlier
+    /// batches remain available while later batches are evaluated.
+    ///
+    /// # Errors
+    /// Returns an error if the WAF encountered an internal error, invalid object, or invalid argument while processing
+    /// the request.
+    fn run_batches(&mut self, data: WafArray, timeout: Duration) -> Result<RunResult, RunError>;
 }
 
 type RunFunc<S> = unsafe extern "C" fn(
@@ -46,7 +56,8 @@ type RunFunc<S> = unsafe extern "C" fn(
 fn run<S>(
     raw_self: S,
     func: RunFunc<S>,
-    mut data: WafMap,
+    func_name: &'static str,
+    mut data: impl AsRawMutObject,
     timeout: Duration,
 ) -> Result<RunResult, RunError> {
     let mut res = std::mem::MaybeUninit::<RunOutput>::uninit();
@@ -69,7 +80,11 @@ fn run<S>(
             std::mem::forget(data);
             Err(RunError::InternalError)
         }
-        libddwaf_sys::DDWAF_ERR_INVALID_OBJECT => Err(RunError::InvalidObject),
+        libddwaf_sys::DDWAF_ERR_INVALID_OBJECT => {
+            // The C API frees invalid object data using the allocator passed above.
+            std::mem::forget(data);
+            Err(RunError::InvalidObject)
+        }
         libddwaf_sys::DDWAF_ERR_INVALID_ARGUMENT => Err(RunError::InvalidArgument),
         libddwaf_sys::DDWAF_OK => {
             // We need to keep the persistent data alive (now owned by the WAF)
@@ -83,14 +98,30 @@ fn run<S>(
         }
         unknown => unreachable!(
             "Unexpected value returned by {}: 0x{:02X}",
-            stringify!(libddwaf_sys::ddwaf_run),
+            func_name,
             unknown
         ),
     }
 }
 impl RunnableContext for Context {
     fn run(&mut self, data: WafMap, timeout: Duration) -> Result<RunResult, RunError> {
-        run(self.raw, libddwaf_sys::ddwaf_context_eval, data, timeout)
+        run(
+            self.raw,
+            libddwaf_sys::ddwaf_context_eval,
+            stringify!(libddwaf_sys::ddwaf_context_eval),
+            data,
+            timeout,
+        )
+    }
+
+    fn run_batches(&mut self, data: WafArray, timeout: Duration) -> Result<RunResult, RunError> {
+        run(
+            self.raw,
+            libddwaf_sys::ddwaf_context_multieval,
+            stringify!(libddwaf_sys::ddwaf_context_multieval),
+            data,
+            timeout,
+        )
     }
 }
 impl Context {
@@ -110,7 +141,23 @@ impl Context {
 }
 impl RunnableContext for Subcontext {
     fn run(&mut self, data: WafMap, timeout: Duration) -> Result<RunResult, RunError> {
-        run(self.raw, libddwaf_sys::ddwaf_subcontext_eval, data, timeout)
+        run(
+            self.raw,
+            libddwaf_sys::ddwaf_subcontext_eval,
+            stringify!(libddwaf_sys::ddwaf_subcontext_eval),
+            data,
+            timeout,
+        )
+    }
+
+    fn run_batches(&mut self, data: WafArray, timeout: Duration) -> Result<RunResult, RunError> {
+        run(
+            self.raw,
+            libddwaf_sys::ddwaf_subcontext_multieval,
+            stringify!(libddwaf_sys::ddwaf_subcontext_multieval),
+            data,
+            timeout,
+        )
     }
 }
 impl Drop for Context {
@@ -222,6 +269,16 @@ impl RunOutput {
             .unwrap_or_default()
     }
 
+    /// Returns the number of input batches fully evaluated by the WAF.
+    #[must_use]
+    pub fn evaluated(&self) -> u64 {
+        debug_assert!(self.data.is_valid());
+        self.data
+            .get_bstr(b"evaluated")
+            .and_then(|o| o.to_u64())
+            .unwrap_or_default()
+    }
+
     /// Returns the list of events that were produced by this WAF run.
     ///
     /// This is only expected to be populated when [`Context::run`] returns [`RunResult::Match`].
@@ -257,6 +314,7 @@ impl fmt::Debug for RunOutput {
             .field("timeout", &self.timeout())
             .field("keep", &self.keep())
             .field("duration", &self.duration())
+            .field("evaluated", &self.evaluated())
             .field("events", &self.events())
             .field("actions", &self.actions())
             .field("attributes", &self.attributes())

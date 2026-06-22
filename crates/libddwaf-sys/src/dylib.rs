@@ -103,6 +103,7 @@ reexport! {
     pub unsafe fn ddwaf_context_destroy(context: ddwaf_context) {}
     pub unsafe fn ddwaf_context_eval(context: ddwaf_context, data: *mut ddwaf_object, alloc: ddwaf_allocator, result: *mut ddwaf_object, timeout: u64) -> DDWAF_RET_CODE { DDWAF_ERR_INTERNAL }
     pub unsafe fn ddwaf_context_init(handle: ddwaf_handle, output_alloc: ddwaf_allocator) -> ddwaf_context { std::ptr::null_mut() }
+    pub unsafe fn ddwaf_context_multieval(context: ddwaf_context, data: *mut ddwaf_object, alloc: ddwaf_allocator, result: *mut ddwaf_object, timeout: u64) -> DDWAF_RET_CODE { DDWAF_ERR_INTERNAL }
     pub unsafe fn ddwaf_destroy(handle: ddwaf_handle) {}
     pub unsafe fn ddwaf_get_default_allocator() -> ddwaf_allocator { std::ptr::null_mut() }
     pub unsafe fn ddwaf_get_version() -> *const std::os::raw::c_char { std::ptr::null() }
@@ -152,6 +153,7 @@ reexport! {
     pub unsafe fn ddwaf_subcontext_destroy(subcontext: ddwaf_subcontext) {}
     pub unsafe fn ddwaf_subcontext_eval(subcontext: ddwaf_subcontext, data: *mut ddwaf_object, alloc: ddwaf_allocator, result: *mut ddwaf_object, timeout: u64) -> DDWAF_RET_CODE { DDWAF_ERR_INTERNAL }
     pub unsafe fn ddwaf_subcontext_init(context: ddwaf_context) -> ddwaf_subcontext { std::ptr::null_mut() }
+    pub unsafe fn ddwaf_subcontext_multieval(subcontext: ddwaf_subcontext, data: *mut ddwaf_object, alloc: ddwaf_allocator, result: *mut ddwaf_object, timeout: u64) -> DDWAF_RET_CODE { DDWAF_ERR_INTERNAL }
     pub unsafe fn ddwaf_synchronized_pool_allocator_init() -> ddwaf_allocator { std::ptr::null_mut() }
     pub unsafe fn ddwaf_unsynchronized_pool_allocator_init() -> ddwaf_allocator { std::ptr::null_mut() }
     pub unsafe fn ddwaf_user_allocator_init(alloc_fn: ddwaf_alloc_fn_type, free_fn: ddwaf_free_fn_type, udata: *mut ::std::os::raw::c_void, udata_free_fn: ddwaf_udata_free_fn_type) -> ddwaf_allocator { std::ptr::null_mut() }
