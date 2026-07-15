@@ -183,7 +183,9 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
                 format!("libddwaf-{version}-x86_64-linux-musl.tar.gz"),
                 "libddwaf.so",
             ),
-            "x86_64-unknown-linux-musl" => (
+            // "x86_64-alpine-linux-musl" is Alpine's own (non-rustup) cargo/rustc
+            // reporting its host triple with an "alpine" vendor instead of "unknown".
+            "x86_64-unknown-linux-musl" | "x86_64-alpine-linux-musl" => (
                 format!("libddwaf-{version}-x86_64-linux-musl.tar.gz"),
                 "libddwaf.so",
             ),
@@ -191,7 +193,7 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
                 format!("libddwaf-{version}-aarch64-linux-musl.tar.gz"),
                 "libddwaf.so",
             ),
-            "aarch64-unknown-linux-musl" => (
+            "aarch64-unknown-linux-musl" | "aarch64-alpine-linux-musl" => (
                 format!("libddwaf-{version}-aarch64-linux-musl.tar.gz"),
                 "libddwaf.so",
             ),
