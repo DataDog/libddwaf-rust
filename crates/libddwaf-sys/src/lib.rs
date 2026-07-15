@@ -12,6 +12,13 @@ use std::slice;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+#[cfg(all(
+    target_arch = "x86_64",
+    target_os = "linux",
+    not(any(feature = "dynamic", feature = "dynamic-link"))
+))]
+mod cpu_model;
+
 #[cfg(feature = "dynamic")]
 mod dylib;
 #[cfg(feature = "dynamic")]
