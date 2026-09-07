@@ -25,13 +25,17 @@ bindgen = "0.72"
 flate2 = "1.1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "http2", "rustls-tls-native-roots-no-provider"] }
 tar = "0.4"
-# Following is to ensure FIPS compliance is possible.
-hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs"] }
-rustls = { version = "0.23", default-features = false, features= ["aws-lc-rs"] }
+hyper-rustls = { version = "0.27", default-features = false }
+rustls = { version = "0.23", default-features = false }
 zstd = "0.13"
 
 [features]
-default = []
+default = ["aws-lc-rs"]
+# aws-lc-rs is the default to keep the downloader FIPS-capable out of the box;
+# switch to "ring" instead if aws-lc-sys's vendored jitterentropy C sources fail
+# to compile under your toolchain/build flags (see DataDog/dd-trace-php#4162).
+aws-lc-rs = ["hyper-rustls/aws-lc-rs", "rustls/aws-lc-rs"]
+ring = ["hyper-rustls/ring", "rustls/ring"]
 fips = ["hyper-rustls/fips", "rustls/fips"]
 # Embeds a compressed libddwaf.so and extracts it to a temporary file at runtime, then loads it with libloading/dlopen
 dynamic = ["lazy_static", "libloading", "tempfile", "tracing", "zstd"]

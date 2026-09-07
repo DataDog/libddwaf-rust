@@ -9,6 +9,29 @@ use flate2::read::GzDecoder;
 use reqwest::blocking::get;
 use tar::Archive;
 
+// Crypto provider for the build script's own downloader. Chooses whichever of
+// the `aws-lc-rs`/`ring` features is active (aws-lc-rs takes priority if both
+// are somehow enabled); this is independent of the linked libddwaf itself.
+#[cfg(feature = "aws-lc-rs")]
+fn install_crypto_provider() {
+    rustls::crypto::CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider())
+        .expect("Failed to set rustls default crypto provider");
+}
+
+#[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
+fn install_crypto_provider() {
+    rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider())
+        .expect("Failed to set rustls default crypto provider");
+}
+
+#[cfg(not(any(feature = "aws-lc-rs", feature = "ring")))]
+fn install_crypto_provider() {
+    panic!(
+        "libddwaf-sys's build script needs a rustls crypto provider to download \
+         the prebuilt libddwaf archive: enable the `aws-lc-rs` or `ring` feature."
+    );
+}
+
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
@@ -45,8 +68,7 @@ fn main() {
     }
 
     // Ensure reqwest is able to use a crypto provider (no default is set so it's easier to maintain FIPS compliance)
-    rustls::crypto::CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider())
-        .expect("Failed to set rustls default crypto provider");
+    install_crypto_provider();
 
     // Read the Rust crate version from the environment variable set by Cargo
     let version =
