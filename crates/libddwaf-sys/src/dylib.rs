@@ -139,10 +139,12 @@ reexport! {
     pub unsafe fn ddwaf_object_is_string(object: *const ddwaf_object) -> bool { false }
     pub unsafe fn ddwaf_object_is_unsigned(object: *const ddwaf_object) -> bool { false }
     pub unsafe fn ddwaf_object_set_array(object: *mut ddwaf_object, capacity: u16, alloc: ddwaf_allocator) -> *mut ddwaf_object { std::ptr::null_mut() }
+    pub unsafe fn ddwaf_object_set_array_large(object: *mut ddwaf_object, capacity: usize, alloc: ddwaf_allocator) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_bool(object: *mut ddwaf_object, value: bool) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_float(object: *mut ddwaf_object, value: f64) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_invalid(object: *mut ddwaf_object) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_map(object: *mut ddwaf_object, capacity: u16, alloc: ddwaf_allocator) -> *mut ddwaf_object { std::ptr::null_mut() }
+    pub unsafe fn ddwaf_object_set_map_large(object: *mut ddwaf_object, capacity: usize, alloc: ddwaf_allocator) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_null(object: *mut ddwaf_object) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_signed(object: *mut ddwaf_object, value: i64) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_string(object: *mut ddwaf_object, string: *const ::std::os::raw::c_char, length: u32, alloc: ddwaf_allocator) -> *mut ddwaf_object { std::ptr::null_mut() }

@@ -419,3 +419,77 @@ fn test_eq_array_and_map() {
     assert_ne!(left, wrong3);
     assert_ne!(left, ddwaf_object::default());
 }
+
+#[test]
+fn test_compact_and_large_containers_are_equivalent() {
+    let mut array_items = [ddwaf_object::default()];
+    unsafe { ddwaf_object_set_unsigned(&mut array_items[0], 42) };
+
+    let compact_array = ddwaf_object {
+        via: _ddwaf_object__bindgen_ty_1 {
+            array: _ddwaf_object_array {
+                type_: DDWAF_OBJ_ARRAY as u8,
+                size: 1,
+                capacity: 1,
+                ptr: array_items.as_mut_ptr(),
+            },
+        },
+    };
+    let mut large_array_data = _ddwaf_object_large_array::default();
+    large_array_data.set__type(u64::from(DDWAF_OBJ_LARGE_ARRAY));
+    large_array_data.set_size(1);
+    large_array_data.set_capacity(1);
+    large_array_data.ptr = array_items.as_mut_ptr();
+    let mut large_array = ddwaf_object {
+        via: _ddwaf_object__bindgen_ty_1 {
+            large_array: large_array_data,
+        },
+    };
+
+    assert!(compact_array.is_array());
+    assert!(large_array.is_array());
+    assert_eq!(large_array.array_len(), 1);
+    assert_eq!(large_array.array_capacity(), 1);
+    assert_eq!(large_array.array_ptr(), array_items.as_mut_ptr());
+    assert_eq!(compact_array, large_array);
+    assert!(format!("{large_array:?}").contains("DDWAF_OBJ_LARGE_ARRAY"));
+    unsafe { large_array.set_array_len(0) };
+    assert_eq!(large_array.array_len(), 0);
+
+    let mut map_items = [_ddwaf_object_kv::default()];
+    unsafe {
+        ddwaf_object_set_string_literal(&mut map_items[0].key, b"key".as_ptr().cast(), 3);
+        ddwaf_object_set_unsigned(&mut map_items[0].val, 42);
+    }
+
+    let compact_map = ddwaf_object {
+        via: _ddwaf_object__bindgen_ty_1 {
+            map: _ddwaf_object_map {
+                type_: DDWAF_OBJ_MAP as u8,
+                size: 1,
+                capacity: 1,
+                ptr: map_items.as_mut_ptr(),
+            },
+        },
+    };
+    let mut large_map_data = _ddwaf_object_large_map::default();
+    large_map_data.set__type(u64::from(DDWAF_OBJ_LARGE_MAP));
+    large_map_data.set_size(1);
+    large_map_data.set_capacity(1);
+    large_map_data.ptr = map_items.as_mut_ptr();
+    let mut large_map = ddwaf_object {
+        via: _ddwaf_object__bindgen_ty_1 {
+            large_map: large_map_data,
+        },
+    };
+
+    assert!(compact_map.is_map());
+    assert!(large_map.is_map());
+    assert_eq!(large_map.map_len(), 1);
+    assert_eq!(large_map.map_capacity(), 1);
+    assert_eq!(large_map.map_ptr(), map_items.as_mut_ptr());
+    assert_eq!(compact_map, large_map);
+    assert!(format!("{large_map:?}").contains("DDWAF_OBJ_LARGE_MAP"));
+    unsafe { large_map.set_map_len(0) };
+    assert_eq!(large_map.map_len(), 0);
+}

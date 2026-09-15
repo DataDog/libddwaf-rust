@@ -78,31 +78,21 @@ fn map_deserialization_wrong_type() {
 }
 
 #[test]
-fn oversized_array_deserialization_returns_error() {
+fn large_array_deserialization() {
     const LEN: usize = u16::MAX as usize + 1;
     let json = format!("[{}]", vec!["null"; LEN].join(","));
 
-    let error = from_str::<WafObject>(&json).unwrap_err();
-    assert_length_too_large_error(&error);
+    let array: WafArray = from_str::<WafObject>(&json).unwrap().try_into().unwrap();
+    assert_eq!(array.len(), LEN);
 }
 
 #[test]
-fn oversized_map_deserialization_returns_error() {
+fn large_map_deserialization() {
     const LEN: usize = u16::MAX as usize + 1;
     let json = format!("{{{}}}", vec![r#""key":null"#; LEN].join(","));
 
-    let error = from_str::<WafObject>(&json).unwrap_err();
-    assert_length_too_large_error(&error);
-}
-
-fn assert_length_too_large_error(error: &serde_json::Error) {
-    assert!(error.is_data());
-    assert!(
-        error
-            .to_string()
-            .starts_with("Length 65536 exceeds maximum allowed 65535"),
-        "unexpected error: {error}"
-    );
+    let map: WafMap = from_str::<WafObject>(&json).unwrap().try_into().unwrap();
+    assert_eq!(map.len(), LEN);
 }
 
 #[test]

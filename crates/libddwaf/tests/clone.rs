@@ -71,12 +71,12 @@ fn clone_string_variants() {
 
 #[test]
 fn clone_empty_containers() {
-    let empty_arr = WafArray::new(0);
+    let empty_arr = WafArray::new(0).unwrap();
     let cloned_arr = empty_arr.clone();
     assert_eq!(cloned_arr.len(), 0);
     assert!(cloned_arr.is_empty());
 
-    let empty_map = WafMap::new(0);
+    let empty_map = WafMap::new(0).unwrap();
     let cloned_map = empty_map.clone();
     assert_eq!(cloned_map.len(), 0);
     assert!(cloned_map.is_empty());
@@ -84,7 +84,7 @@ fn clone_empty_containers() {
 
 #[test]
 fn clone_array_shallow() {
-    let mut orig = WafArray::new(3);
+    let mut orig = WafArray::new(3).unwrap();
     orig[0] = 42u64.into();
     orig[1] = "hello".into();
     orig[2] = true.into();
@@ -105,7 +105,7 @@ fn clone_array_shallow() {
 
 #[test]
 fn clone_array_deep() {
-    let mut orig = WafArray::new(3);
+    let mut orig = WafArray::new(3).unwrap();
     orig[0] = 42u64.into();
     orig[1] = "hello".into();
     orig[2] = waf_array!(1u64, 2u64).into();
@@ -242,7 +242,7 @@ fn clone_memory_independence() {
 #[test]
 fn clone_array_size_not_capacity() {
     // Create array with capacity > size
-    let mut orig = WafArray::new(5);
+    let mut orig = WafArray::new(5).unwrap();
     orig[0] = 1u64.into();
     orig[1] = 2u64.into();
     orig.truncate(2);
@@ -258,7 +258,7 @@ fn clone_array_size_not_capacity() {
 #[test]
 fn clone_map_size_not_capacity() {
     // Create map with capacity > size
-    let mut orig = WafMap::new(5);
+    let mut orig = WafMap::new(5).unwrap();
     orig[0] = ("key1", 1u64).into();
     orig[1] = ("key2", 2u64).into();
     orig.truncate(2);
