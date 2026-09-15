@@ -7,15 +7,17 @@ impl IntoIterator for WafArray {
     type IntoIter = WafIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let array: *mut Self::Item = unsafe { self.raw.via.array.ptr.cast() };
-        let len = if array.is_null() {
-            0
-        } else {
-            self.len() as usize
-        };
+        let array: *mut Self::Item = self.raw.array_ptr().cast();
+        let len = self.len();
+        let capacity = self.capacity();
         // Forget about self, since the iterator is now the owner of the memory.
         std::mem::forget(self);
-        WafIter { array, len, pos: 0 }
+        WafIter {
+            array,
+            len,
+            capacity,
+            pos: 0,
+        }
     }
 }
 
@@ -34,15 +36,17 @@ impl IntoIterator for WafMap {
     type IntoIter = WafIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let array: *mut Keyed<WafObject> = unsafe { self.raw.via.map.ptr.cast() };
-        let len = if array.is_null() {
-            0
-        } else {
-            self.len() as usize
-        };
+        let array: *mut Keyed<WafObject> = self.raw.map_ptr().cast();
+        let len = self.len();
+        let capacity = self.capacity();
         // Forget about self, since the iterator is now the owner of the memory.
         std::mem::forget(self);
-        WafIter { array, len, pos: 0 }
+        WafIter {
+            array,
+            len,
+            capacity,
+            pos: 0,
+        }
     }
 }
 
@@ -60,6 +64,7 @@ impl IntoIterator for Keyed<WafMap> {
 pub struct WafIter<T> {
     array: *mut T,
     len: usize,
+    capacity: usize,
     pos: usize,
 }
 impl<T: Default> Iterator for WafIter<T> {
@@ -82,9 +87,9 @@ impl<T> Drop for WafIter<T> {
             let elem = unsafe { self.array.add(i) };
             unsafe { elem.drop_in_place() };
         }
-        if self.len != 0 {
+        if self.capacity != 0 {
             // Finally, drop the array itself.
-            let layout = Layout::array::<T>(self.len).unwrap();
+            let layout = Layout::array::<T>(self.capacity).unwrap();
             unsafe { std::alloc::dealloc(self.array.cast(), layout) }
         }
     }

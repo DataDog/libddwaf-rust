@@ -13,8 +13,8 @@ use serde::{
 };
 
 use crate::object::{
-    Keyed, LengthTooLargeError, WafArray, WafBool, WafFloat, WafMap, WafNull, WafObject,
-    WafObjectType, WafSigned, WafString, WafUnsigned,
+    Keyed, WafArray, WafBool, WafFloat, WafMap, WafNull, WafObject, WafObjectType, WafSigned,
+    WafString, WafUnsigned,
 };
 
 impl<'de> serde::Deserialize<'de> for WafObject {
@@ -105,7 +105,7 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
         while let Some(value) = seq.next_element()? {
             vec.push(value);
         }
-        let mut res = WafArray::new(container_length::<A::Error>(vec.len())?);
+        let mut res = WafArray::new(vec.len()).map_err(A::Error::custom)?;
         for (i, v) in vec.into_iter().enumerate() {
             res[i] = v;
         }
@@ -121,21 +121,12 @@ impl<'de> serde::de::Visitor<'de> for Visitor {
         while let Some((key, value)) = map.next_entry::<WafObject, WafObject>()? {
             vec.push((key, value));
         }
-        let mut res = WafMap::new(container_length::<A::Error>(vec.len())?);
+        let mut res = WafMap::new(vec.len()).map_err(A::Error::custom)?;
         for (i, (k, v)) in vec.into_iter().enumerate() {
             res[i] = Keyed::new(k, v);
         }
         Ok(res.into())
     }
-}
-
-fn container_length<E: Error>(length: usize) -> Result<u16, E> {
-    u16::try_from(length).map_err(|_| {
-        E::custom(LengthTooLargeError {
-            length,
-            max_length: u16::MAX as usize,
-        })
-    })
 }
 
 impl serde::Serialize for WafObject {
@@ -220,7 +211,7 @@ impl serde::Serialize for WafArray {
     where
         S: serde::Serializer,
     {
-        let mut seq_serializer = serializer.serialize_seq(Some(self.len() as usize))?;
+        let mut seq_serializer = serializer.serialize_seq(Some(self.len()))?;
         for value in self.iter() {
             seq_serializer.serialize_element(value)?;
         }
@@ -233,7 +224,7 @@ impl serde::Serialize for WafMap {
     where
         S: serde::Serializer,
     {
-        let mut map_serializer = serializer.serialize_map(Some(self.len() as usize))?;
+        let mut map_serializer = serializer.serialize_map(Some(self.len()))?;
         for keyed_val in self.iter() {
             // Key is serialized as WafObject; formats requiring string keys (e.g. JSON)
             // will error if the key is not a WafString
@@ -532,9 +523,8 @@ impl<'de> serde::de::Visitor<'de> for LimitedVisitor<'_> {
 
         self.state.exit_depth();
 
-        let len = vec.len().min(u16::MAX as usize);
-        let mut res = WafArray::new(len as u16);
-        for (i, v) in vec.into_iter().take(len).enumerate() {
+        let mut res = WafArray::new(vec.len()).map_err(A::Error::custom)?;
+        for (i, v) in vec.into_iter().enumerate() {
             res[i] = v;
         }
         Ok(res.into())
@@ -595,9 +585,8 @@ impl<'de> serde::de::Visitor<'de> for LimitedVisitor<'_> {
 
         self.state.exit_depth();
 
-        let len = vec.len().min(u16::MAX as usize);
-        let mut res = WafMap::new(len as u16);
-        for (i, keyed) in vec.into_iter().take(len).enumerate() {
+        let mut res = WafMap::new(vec.len()).map_err(A::Error::custom)?;
+        for (i, keyed) in vec.into_iter().enumerate() {
             res[i] = keyed;
         }
         Ok(res.into())

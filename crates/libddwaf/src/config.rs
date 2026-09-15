@@ -13,16 +13,20 @@ impl Config {
         Self { obfuscator }
     }
 
+    /// Returns this configuration as a [`WafMap`].
+    ///
+    /// # Panics
+    /// Panics if memory allocation fails (out of memory).
     #[must_use]
     pub fn as_waf_object(&self) -> WafMap {
-        let mut map = WafMap::new(2);
-        let mut used: u16 = 0;
+        let mut map = WafMap::new(2).expect("configuration map length is representable");
+        let mut used = 0;
         if let Some(key_regex) = self.obfuscator.key_regex() {
-            map[used as usize] = ("key_regex", key_regex).into();
+            map[used] = ("key_regex", key_regex).into();
             used += 1;
         }
         if let Some(value_regex) = self.obfuscator.value_regex() {
-            map[used as usize] = ("value_regex", value_regex).into();
+            map[used] = ("value_regex", value_regex).into();
             used += 1;
         }
         map.truncate(used);

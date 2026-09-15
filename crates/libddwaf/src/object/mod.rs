@@ -1,7 +1,6 @@
 #![doc = "Data model for exchanging data with the in-app WAF."]
 
 use std::alloc::Layout;
-use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::ptr::null_mut;
 use std::sync::OnceLock;
@@ -10,6 +9,32 @@ use std::{cmp, fmt};
 mod iter;
 #[doc(inline)]
 pub use iter::*;
+
+const LARGE_CONTAINER_LENGTH_LIMIT: usize = 0x0fff_ffff;
+// Rust allocations and slices cannot exceed isize::MAX bytes.
+const RUST_ALLOCATION_SIZE_LIMIT: usize = usize::MAX / 2;
+
+/// The maximum number of elements representable by a [`WafArray`].
+pub const MAX_ARRAY_LENGTH: usize = {
+    let allocation_limit =
+        RUST_ALLOCATION_SIZE_LIMIT / std::mem::size_of::<libddwaf_sys::ddwaf_object>();
+    if allocation_limit < LARGE_CONTAINER_LENGTH_LIMIT {
+        allocation_limit
+    } else {
+        LARGE_CONTAINER_LENGTH_LIMIT
+    }
+};
+
+/// The maximum number of entries representable by a [`WafMap`].
+pub const MAX_MAP_LENGTH: usize = {
+    let allocation_limit =
+        RUST_ALLOCATION_SIZE_LIMIT / std::mem::size_of::<libddwaf_sys::_ddwaf_object_kv>();
+    if allocation_limit < LARGE_CONTAINER_LENGTH_LIMIT {
+        allocation_limit
+    } else {
+        LARGE_CONTAINER_LENGTH_LIMIT
+    }
+};
 
 /// Identifies the type of the value stored in a [`WafObject`].
 #[non_exhaustive]
@@ -61,8 +86,12 @@ impl TryFrom<libddwaf_sys::DDWAF_OBJ_TYPE> for WafObjectType {
             libddwaf_sys::DDWAF_OBJ_STRING
             | libddwaf_sys::DDWAF_OBJ_LITERAL_STRING
             | libddwaf_sys::DDWAF_OBJ_SMALL_STRING => Ok(WafObjectType::String),
-            libddwaf_sys::DDWAF_OBJ_ARRAY => Ok(WafObjectType::Array),
-            libddwaf_sys::DDWAF_OBJ_MAP => Ok(WafObjectType::Map),
+            libddwaf_sys::DDWAF_OBJ_ARRAY | libddwaf_sys::DDWAF_OBJ_LARGE_ARRAY => {
+                Ok(WafObjectType::Array)
+            }
+            libddwaf_sys::DDWAF_OBJ_MAP | libddwaf_sys::DDWAF_OBJ_LARGE_MAP => {
+                Ok(WafObjectType::Map)
+            }
             libddwaf_sys::DDWAF_OBJ_BOOL => Ok(WafObjectType::Bool),
             libddwaf_sys::DDWAF_OBJ_FLOAT => Ok(WafObjectType::Float),
             libddwaf_sys::DDWAF_OBJ_NULL => Ok(WafObjectType::Null),
@@ -100,7 +129,8 @@ impl std::fmt::Display for ObjectTypeError {
 
 /// The error that is returned when a value's length exceeds the maximum allowed.
 ///
-/// This applies to strings (max [`u32::MAX`]) and arrays/maps (max [`u16::MAX`]).
+/// This applies to strings (max [`u32::MAX`]), arrays (max [`MAX_ARRAY_LENGTH`]),
+/// and maps (max [`MAX_MAP_LENGTH`]).
 #[derive(Copy, Clone, Debug)]
 pub struct LengthTooLargeError {
     /// The length that was too large.
@@ -796,42 +826,76 @@ typed_object!(WafObjectType::String => WafString
         std::str::from_utf8(self.as_bytes())
     }
 });
-typed_object!(WafObjectType::Array => WafArray {
+typed_object!(WafObjectType::Array => WafArray
+    is_valid {
+        pub fn is_valid(&self) -> bool {
+            self.raw.is_array()
+        }
+    }
+    {
     /// Creates a new [`WafArray`] with the provided size. All values in the array are initialized
     /// to an invalid [`WafObject`] instance.
     ///
+    /// # Errors
+    /// Returns an error if `nb_entries` exceeds [`MAX_ARRAY_LENGTH`].
+    ///
     /// # Panics
     /// Panics if memory allocation fails (out of memory).
-    #[must_use]
-    pub fn new(nb_entries: u16) -> Self {
-        let size = usize::from(nb_entries);
-        let layout = Layout::array::<libddwaf_sys::ddwaf_object>(size).unwrap();
-        let ptr = unsafe { no_fail_alloc(layout).cast() };
-        unsafe { std::ptr::write_bytes(ptr, 0, size)};
-        Self {
-            raw: libddwaf_sys::ddwaf_object {
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn new(nb_entries: usize) -> Result<Self, LengthTooLargeError> {
+        if nb_entries > MAX_ARRAY_LENGTH {
+            return Err(LengthTooLargeError {
+                length: nb_entries,
+                max_length: MAX_ARRAY_LENGTH,
+            });
+        }
+        let layout = Layout::array::<libddwaf_sys::ddwaf_object>(nb_entries).map_err(|_| {
+            LengthTooLargeError {
+                length: nb_entries,
+                max_length: MAX_ARRAY_LENGTH,
+            }
+        })?;
+        let ptr: *mut libddwaf_sys::ddwaf_object = unsafe { no_fail_alloc(layout).cast() };
+        if nb_entries != 0 {
+            unsafe { std::ptr::write_bytes(ptr, 0, nb_entries) };
+        }
+
+        let raw = if let Ok(compact_entries) = u16::try_from(nb_entries) {
+            libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     array: libddwaf_sys::_ddwaf_object_array {
-                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_ARRAY as u8,
-                        size: nb_entries,
-                        capacity: nb_entries,
+                        size: compact_entries,
+                        capacity: compact_entries,
                         ptr,
                     },
                 },
             }
-        }
+        } else {
+            let mut array = libddwaf_sys::_ddwaf_object_large_array::default();
+            array.set__type(u64::from(libddwaf_sys::DDWAF_OBJ_LARGE_ARRAY));
+            array.set_size(nb_entries as u64);
+            array.set_capacity(nb_entries as u64);
+            array.ptr = ptr;
+            libddwaf_sys::ddwaf_object {
+                via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 { large_array: array },
+            }
+        };
+
+        Ok(Self {
+            raw,
+        })
     }
 
     /// Returns the length of this [`WafArray`].
     #[must_use]
-    pub const fn len(&self) -> u16 {
-        unsafe { self.raw.via.array.size }
+    pub fn len(&self) -> usize {
+        self.raw.array_len()
     }
 
     /// Returns true if this [`WafArray`] is empty.
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
@@ -840,8 +904,8 @@ typed_object!(WafObjectType::Array => WafArray {
     /// The capacity is an implementation detail and is only used to for properly
     /// deallocating the memory when the array is dropped.
     #[must_use]
-    pub const fn capacity(&self) -> u16 {
-        unsafe { self.raw.via.array.capacity }
+    pub fn capacity(&self) -> usize {
+        self.raw.array_capacity()
     }
 
     /// Truncates this [`WafArray`] to the provided size.
@@ -850,67 +914,101 @@ typed_object!(WafObjectType::Array => WafArray {
     ///
     /// It does not free the extra memory, except insofar as it drops the extra elements.
     /// Useful when you pessimistically allocate a larger array, but later discover that you don't need all the capacity.
-    pub fn truncate(&mut self, new_size: u16) {
+    pub fn truncate(&mut self, new_size: usize) {
         if new_size > self.len() {
             return;
         }
-        let arr: *mut WafObject = unsafe { self.raw.via.array.ptr.cast() };
+        let arr: *mut WafObject = self.raw.array_ptr().cast();
         for i in new_size..self.len() {
             unsafe {
-                std::ptr::drop_in_place(arr.add(i as usize));
+                std::ptr::drop_in_place(arr.add(i));
             }
         }
-        self.raw.via.array.size = new_size;
+        unsafe { self.raw.set_array_len(new_size) };
     }
 
-    /// Returns an iterator over the [`Keyed<WafObject>`]s in this [`WafMap`].
+    /// Returns an iterator over the [`WafObject`]s in this [`WafArray`].
     pub fn iter(&self) -> impl Iterator<Item = &WafObject> {
         let slice : &[WafObject] = self.as_ref();
         slice.iter()
     }
 
-    /// Returns a mutable iterator over the [`Keyed<WafObject>`]s in this [`WafMap`].
+    /// Returns a mutable iterator over the [`WafObject`]s in this [`WafArray`].
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut WafObject> {
         let slice : &mut [WafObject] = AsMut::as_mut(self);
         slice.iter_mut()
     }
 });
-typed_object!(WafObjectType::Map => WafMap {
+typed_object!(WafObjectType::Map => WafMap
+    is_valid {
+        pub fn is_valid(&self) -> bool {
+            self.raw.is_map()
+        }
+    }
+    {
     /// Creates a new [`WafMap`] with the provided size. All values in the map are initialized
     /// to an invalid [`WafObject`] instance with a blank key.
     ///
+    /// # Errors
+    /// Returns an error if `nb_entries` exceeds [`MAX_MAP_LENGTH`].
+    ///
     /// # Panics
     /// Panics if memory allocation fails (out of memory).
-    #[must_use]
-    pub fn new(nb_entries: u16) -> Self {
-        let size = usize::from(nb_entries);
-        let layout = Layout::array::<libddwaf_sys::_ddwaf_object_kv>(size).unwrap();
-        let ptr = unsafe { no_fail_alloc(layout).cast() };
-        unsafe { std::ptr::write_bytes(ptr, 0, size)};
-        Self {
-            raw: libddwaf_sys::ddwaf_object {
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn new(nb_entries: usize) -> Result<Self, LengthTooLargeError> {
+        if nb_entries > MAX_MAP_LENGTH {
+            return Err(LengthTooLargeError {
+                length: nb_entries,
+                max_length: MAX_MAP_LENGTH,
+            });
+        }
+        let layout = Layout::array::<libddwaf_sys::_ddwaf_object_kv>(nb_entries).map_err(|_| {
+            LengthTooLargeError {
+                length: nb_entries,
+                max_length: MAX_MAP_LENGTH,
+            }
+        })?;
+        let ptr: *mut libddwaf_sys::_ddwaf_object_kv = unsafe { no_fail_alloc(layout).cast() };
+        if nb_entries != 0 {
+            unsafe { std::ptr::write_bytes(ptr, 0, nb_entries) };
+        }
+
+        let raw = if let Ok(compact_entries) = u16::try_from(nb_entries) {
+            libddwaf_sys::ddwaf_object {
                 via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
                     map: libddwaf_sys::_ddwaf_object_map {
-                        #[allow(clippy::cast_possible_truncation)]
                         type_: libddwaf_sys::DDWAF_OBJ_MAP as u8,
-                        size: nb_entries,
-                        capacity: nb_entries,
+                        size: compact_entries,
+                        capacity: compact_entries,
                         ptr,
                     },
                 },
             }
-        }
+        } else {
+            let mut map = libddwaf_sys::_ddwaf_object_large_map::default();
+            map.set__type(u64::from(libddwaf_sys::DDWAF_OBJ_LARGE_MAP));
+            map.set_size(nb_entries as u64);
+            map.set_capacity(nb_entries as u64);
+            map.ptr = ptr;
+            libddwaf_sys::ddwaf_object {
+                via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 { large_map: map },
+            }
+        };
+
+        Ok(Self {
+            raw,
+        })
     }
 
     /// Returns the length of this [`WafMap`].
     #[must_use]
-    pub const fn len(&self) -> u16 {
-        unsafe { self.raw.via.map.size }
+    pub fn len(&self) -> usize {
+        self.raw.map_len()
     }
 
     /// Returns true if this [`WafMap`] is empty.
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
@@ -919,8 +1017,8 @@ typed_object!(WafObjectType::Map => WafMap {
     /// The capacity is an implementation detail and is only used to for properly
     /// deallocating the memory when the map is dropped.
     #[must_use]
-    pub const fn capacity(&self) -> u16 {
-        unsafe { self.raw.via.map.capacity }
+    pub fn capacity(&self) -> usize {
+        self.raw.map_capacity()
     }
 
     /// Truncates this [`WafMap`] to the provided size.
@@ -929,17 +1027,17 @@ typed_object!(WafObjectType::Map => WafMap {
     ///
     /// It does not free the extra memory, except insofar as it drops the extra elements.
     /// Useful when you pessimistically allocate a larger map, but later discover that you don't need all the capacity.
-    pub fn truncate(&mut self, new_size: u16) {
+    pub fn truncate(&mut self, new_size: usize) {
         if new_size > self.len() {
             return;
         }
-        let entries: *mut Keyed<WafObject> = unsafe { self.raw.via.map.ptr.cast() };
+        let entries: *mut Keyed<WafObject> = self.raw.map_ptr().cast();
         for i in new_size..self.len() {
             unsafe {
-                std::ptr::drop_in_place(entries.add(i as usize));
+                std::ptr::drop_in_place(entries.add(i));
             }
         }
-        self.raw.via.map.size = new_size;
+        unsafe { self.raw.set_map_len(new_size) };
     }
 
     /// Returns an iterator over the [`Keyed<WafObject>`]s in this [`WafMap`].
@@ -1161,8 +1259,8 @@ impl AsRef<[WafObject]> for WafArray {
         if self.is_empty() {
             return &[];
         }
-        let array = unsafe { self.raw.via.array.ptr.cast() };
-        unsafe { std::slice::from_raw_parts(array, self.len() as usize) }
+        let array = self.raw.array_ptr().cast();
+        unsafe { std::slice::from_raw_parts(array, self.len()) }
     }
 }
 impl AsMut<[WafObject]> for WafArray {
@@ -1170,8 +1268,8 @@ impl AsMut<[WafObject]> for WafArray {
         if self.is_empty() {
             return &mut [];
         }
-        let array = unsafe { self.raw.via.array.ptr.cast() };
-        unsafe { std::slice::from_raw_parts_mut(array, self.len() as usize) }
+        let array = self.raw.array_ptr().cast();
+        unsafe { std::slice::from_raw_parts_mut(array, self.len()) }
     }
 }
 impl fmt::Debug for WafArray {
@@ -1196,42 +1294,19 @@ impl Drop for WafArray {
 }
 impl Clone for WafArray {
     fn clone(&self) -> Self {
-        let size = self.len();
-
-        if size == 0 {
-            return Self::new(0);
+        let mut cloned =
+            Self::new(self.len()).expect("an existing array must have a representable length");
+        for (destination, source) in cloned.iter_mut().zip(self.iter()) {
+            *destination = source.clone();
         }
-
-        let layout = Layout::array::<libddwaf_sys::ddwaf_object>(size as usize).unwrap();
-        let new_arr: *mut libddwaf_sys::ddwaf_object = unsafe { no_fail_alloc(layout).cast() };
-
-        // Clone each element
-        for i in 0..size {
-            let src_elem: &WafObject = &self[i as usize];
-            let cloned_elem = ManuallyDrop::new(src_elem.clone());
-            unsafe { new_arr.add(i as usize).write(cloned_elem.raw) };
-        }
-
-        Self {
-            raw: libddwaf_sys::ddwaf_object {
-                via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
-                    array: libddwaf_sys::_ddwaf_object_array {
-                        #[allow(clippy::cast_possible_truncation)]
-                        type_: libddwaf_sys::DDWAF_OBJ_ARRAY as u8,
-                        size,
-                        capacity: size,
-                        ptr: new_arr,
-                    },
-                },
-            },
-        }
+        cloned
     }
 }
 impl<T: Into<WafObject>, const N: usize> From<[T; N]> for WafArray {
     fn from(value: [T; N]) -> Self {
-        let effective_length = N.min(u16::MAX as usize);
-        #[allow(clippy::cast_possible_truncation)]
-        let mut array = Self::new(effective_length as u16);
+        let effective_length = N.min(MAX_ARRAY_LENGTH);
+        let mut array = Self::new(effective_length)
+            .expect("the effective array length cannot exceed the maximum");
         for (i, obj) in value.into_iter().enumerate() {
             if i >= effective_length {
                 break;
@@ -1246,9 +1321,9 @@ where
     T: Into<WafObject> + Default,
 {
     fn from(value: &mut [T]) -> Self {
-        let effective_length = value.len().min(u16::MAX as usize);
-        #[allow(clippy::cast_possible_truncation)]
-        let mut array = Self::new(effective_length as u16);
+        let effective_length = value.len().min(MAX_ARRAY_LENGTH);
+        let mut array = Self::new(effective_length)
+            .expect("the effective array length cannot exceed the maximum");
         for (i, obj) in value.iter_mut().enumerate() {
             if i >= effective_length {
                 break;
@@ -1262,17 +1337,17 @@ where
 impl Index<usize> for WafArray {
     type Output = WafObject;
     fn index(&self, index: usize) -> &Self::Output {
-        let len = self.len() as usize;
+        let len = self.len();
         assert!(index < len, "index out of bounds ({index} >= {len})");
-        let array = unsafe { self.raw.via.array.ptr };
+        let array = self.raw.array_ptr();
         unsafe { &*(array.add(index) as *const _) }
     }
 }
 impl IndexMut<usize> for WafArray {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let len = self.len() as usize;
+        let len = self.len();
         assert!(index < len, "index out of bounds ({index} >= {len})");
-        let array = unsafe { self.raw.via.array.ptr };
+        let array = self.raw.array_ptr();
         unsafe { &mut *(array.add(index).cast()) }
     }
 }
@@ -1282,8 +1357,8 @@ impl AsRef<[Keyed<WafObject>]> for WafMap {
         if self.is_empty() {
             return &[];
         }
-        let ptr = unsafe { self.raw.via.map.ptr as *const _ };
-        unsafe { std::slice::from_raw_parts(ptr, self.len() as usize) }
+        let ptr = self.raw.map_ptr().cast_const().cast();
+        unsafe { std::slice::from_raw_parts(ptr, self.len()) }
     }
 }
 impl AsMut<[Keyed<WafObject>]> for WafMap {
@@ -1291,8 +1366,8 @@ impl AsMut<[Keyed<WafObject>]> for WafMap {
         if self.is_empty() {
             return &mut [];
         }
-        let ptr = unsafe { self.raw.via.map.ptr.cast() };
-        unsafe { std::slice::from_raw_parts_mut(ptr, self.len() as usize) }
+        let ptr = self.raw.map_ptr().cast();
+        unsafe { std::slice::from_raw_parts_mut(ptr, self.len()) }
     }
 }
 impl fmt::Debug for WafMap {
@@ -1317,60 +1392,36 @@ impl Drop for WafMap {
 }
 impl Clone for WafMap {
     fn clone(&self) -> Self {
-        let size = self.len();
-
-        if size == 0 {
-            return Self::new(0);
+        let mut cloned =
+            Self::new(self.len()).expect("an existing map must have a representable length");
+        for (destination, source) in cloned.iter_mut().zip(self.iter()) {
+            *destination = source.clone();
         }
-
-        let layout = Layout::array::<libddwaf_sys::_ddwaf_object_kv>(size as usize).unwrap();
-        let new_ptr: *mut libddwaf_sys::_ddwaf_object_kv = unsafe { no_fail_alloc(layout).cast() };
-        unsafe { std::ptr::write_bytes(new_ptr, 0, size as usize) };
-
-        // Clone each key-value pair
-        for i in 0..size {
-            let src_entry: &Keyed<WafObject> = &self[i as usize];
-            let cloned_entry = ManuallyDrop::new(src_entry.clone());
-            unsafe { new_ptr.add(i as usize).write(cloned_entry.raw) };
-        }
-
-        Self {
-            raw: libddwaf_sys::ddwaf_object {
-                via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
-                    map: libddwaf_sys::_ddwaf_object_map {
-                        #[allow(clippy::cast_possible_truncation)]
-                        type_: libddwaf_sys::DDWAF_OBJ_MAP as u8,
-                        size,
-                        capacity: size,
-                        ptr: new_ptr,
-                    },
-                },
-            },
-        }
+        cloned
     }
 }
 impl Index<usize> for WafMap {
     type Output = Keyed<WafObject>;
     fn index(&self, index: usize) -> &Self::Output {
-        let len = self.len() as usize;
+        let len = self.len();
         assert!(index < len, "index out of bounds ({index} >= {len})");
-        let ptr = unsafe { self.raw.via.map.ptr };
+        let ptr = self.raw.map_ptr();
         unsafe { &*ptr.add(index).cast() }
     }
 }
 impl IndexMut<usize> for WafMap {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let len = self.len() as usize;
+        let len = self.len();
         assert!(index < len, "index out of bounds ({index} >= {len})");
-        let ptr = unsafe { self.raw.via.map.ptr };
+        let ptr = self.raw.map_ptr();
         unsafe { &mut *ptr.add(index).cast() }
     }
 }
 impl<K: AsRef<[u8]>, V: Into<WafObject>, const N: usize> From<[(K, V); N]> for WafMap {
     fn from(vals: [(K, V); N]) -> Self {
-        let effective_length = N.min(u16::MAX as usize);
-        #[allow(clippy::cast_possible_truncation)]
-        let mut map = WafMap::new(effective_length as u16);
+        let effective_length = N.min(MAX_MAP_LENGTH);
+        let mut map = WafMap::new(effective_length)
+            .expect("the effective map length cannot exceed the maximum");
         for (i, (k, v)) in vals.into_iter().enumerate() {
             if i >= effective_length {
                 break;
@@ -1382,9 +1433,9 @@ impl<K: AsRef<[u8]>, V: Into<WafObject>, const N: usize> From<[(K, V); N]> for W
 }
 impl<V: Into<WafObject>, const N: usize> From<[(WafObject, V); N]> for WafMap {
     fn from(vals: [(WafObject, V); N]) -> Self {
-        let effective_length = N.min(u16::MAX as usize);
-        #[allow(clippy::cast_possible_truncation)]
-        let mut map = WafMap::new(effective_length as u16);
+        let effective_length = N.min(MAX_MAP_LENGTH);
+        let mut map = WafMap::new(effective_length)
+            .expect("the effective map length cannot exceed the maximum");
         for (i, (k, v)) in vals.into_iter().enumerate() {
             if i >= effective_length {
                 break;
@@ -1400,9 +1451,9 @@ where
     V: Into<WafObject> + Default,
 {
     fn from(value: &mut [(K, V)]) -> Self {
-        let effective_length = value.len().min(u16::MAX as usize);
-        #[allow(clippy::cast_possible_truncation)]
-        let mut map = Self::new(effective_length as u16);
+        let effective_length = value.len().min(MAX_MAP_LENGTH);
+        let mut map = Self::new(effective_length)
+            .expect("the effective map length cannot exceed the maximum");
         for (i, (k, v)) in value.iter_mut().enumerate() {
             if i >= effective_length {
                 break;
@@ -1820,11 +1871,11 @@ macro_rules! waf_object {
 /// Helper macro to create [`WafArray`]s.
 #[macro_export]
 macro_rules! waf_array {
-    () => { $crate::object::WafArray::new(0) };
+    () => { $crate::object::WafArray::new(0).unwrap() };
     ($($e:expr),* $(,)?) => {
         {
             let size = [$($crate::__repl_expr_with_unit!($e)),*].len();
-            let mut res = $crate::object::WafArray::new(size as u16);
+            let mut res = $crate::object::WafArray::new(size).unwrap();
             let mut i = usize::MAX;
             $(
                 i = i.wrapping_add(1);
@@ -1838,11 +1889,11 @@ macro_rules! waf_array {
 /// Helper macro to create [`WafMap`]s.
 #[macro_export]
 macro_rules! waf_map {
-    () => { $crate::object::WafMap::new(0) };
+    () => { $crate::object::WafMap::new(0).unwrap() };
     ($(($k:literal, $v:expr)),* $(,)?) => {
         {
             let size = [$($crate::__repl_expr_with_unit!($v)),*].len();
-            let mut res = $crate::object::WafMap::new(u16::try_from(size).unwrap());
+            let mut res = $crate::object::WafMap::new(size).unwrap();
             let mut i = usize::MAX;
             $(
                 i = i.wrapping_add(1);

@@ -112,9 +112,9 @@ fn basic_run_rule_with_match() {
     let waf = builder.build().unwrap();
     let mut ctx = waf.new_context();
 
-    let mut header = WafMap::new(1);
+    let mut header = WafMap::new(1).unwrap();
     header[0] = ("user-agent", "Arachni").into();
-    let mut data = WafMap::new(1);
+    let mut data = WafMap::new(1).unwrap();
     data[0] = ("server.request.headers.no_cookies", header).into();
 
     let res = ctx.run(data, Duration::from_secs(1));
@@ -172,9 +172,9 @@ fn basic_run_rule_with_no_match() {
     let waf = builder.build().unwrap();
     let mut ctx = waf.new_context();
 
-    let mut header = WafMap::new(1);
+    let mut header = WafMap::new(1).unwrap();
     header[0] = ("user-agent", "JDatabaseDriverMysqli").into();
-    let mut data = WafMap::new(1);
+    let mut data = WafMap::new(1).unwrap();
     data[0] = ("server.request.headers.no_cookies", header).into();
 
     let res = ctx.run(data, Duration::from_secs(1));
@@ -269,9 +269,9 @@ fn run_rule_threaded() {
     assert!(builder.add_or_update_config("rules", LazyLock::force(&ARACHNI_RULE), None));
     let waf = Arc::new(builder.build().unwrap());
 
-    let mut header = WafMap::new(1);
+    let mut header = WafMap::new(1).unwrap();
     header[0] = ("user-agent", "Arachni").into();
-    let mut data = WafMap::new(1);
+    let mut data = WafMap::new(1).unwrap();
     data[0] = (
         "server.request.headers.no_cookies",
         Into::<WafObject>::into(header),
