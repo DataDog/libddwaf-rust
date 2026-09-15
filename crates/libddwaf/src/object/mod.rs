@@ -873,7 +873,7 @@ typed_object!(WafObjectType::Array => WafArray
             }
         } else {
             let mut array = libddwaf_sys::_ddwaf_object_large_array::default();
-            array.set__type(u64::from(libddwaf_sys::DDWAF_OBJ_LARGE_ARRAY));
+            array.set__type(u64::from(libddwaf_sys::DDWAF_OBJ_LARGE_ARRAY as u8));
             array.set_size(nb_entries as u64);
             array.set_capacity(nb_entries as u64);
             array.ptr = ptr;
@@ -986,7 +986,7 @@ typed_object!(WafObjectType::Map => WafMap
             }
         } else {
             let mut map = libddwaf_sys::_ddwaf_object_large_map::default();
-            map.set__type(u64::from(libddwaf_sys::DDWAF_OBJ_LARGE_MAP));
+            map.set__type(u64::from(libddwaf_sys::DDWAF_OBJ_LARGE_MAP as u8));
             map.set_size(nb_entries as u64);
             map.set_capacity(nb_entries as u64);
             map.ptr = ptr;

@@ -6,14 +6,9 @@ use libddwaf_sys::*;
 
 #[test]
 fn test_version() {
-    // Skip this test when using an explicit libddwaf source, as it may use a
-    // different version.
+    // Skip this test if LIBDDWAF_PREFIX is set, as it will use a different version
     if std::env::var("LIBDDWAF_PREFIX").is_ok() {
         eprintln!("Skipping test_version: LIBDDWAF_PREFIX is set");
-        return;
-    }
-    if cfg!(any(feature = "source-static", feature = "source-shared")) {
-        eprintln!("Skipping test_version: a source build feature is enabled");
         return;
     }
 
@@ -441,7 +436,7 @@ fn test_compact_and_large_containers_are_equivalent() {
         },
     };
     let mut large_array_data = _ddwaf_object_large_array::default();
-    large_array_data.set__type(u64::from(DDWAF_OBJ_LARGE_ARRAY));
+    large_array_data.set__type(u64::from(DDWAF_OBJ_LARGE_ARRAY as u8));
     large_array_data.set_size(1);
     large_array_data.set_capacity(1);
     large_array_data.ptr = array_items.as_mut_ptr();
@@ -478,7 +473,7 @@ fn test_compact_and_large_containers_are_equivalent() {
         },
     };
     let mut large_map_data = _ddwaf_object_large_map::default();
-    large_map_data.set__type(u64::from(DDWAF_OBJ_LARGE_MAP));
+    large_map_data.set__type(u64::from(DDWAF_OBJ_LARGE_MAP as u8));
     large_map_data.set_size(1);
     large_map_data.set_capacity(1);
     large_map_data.ptr = map_items.as_mut_ptr();

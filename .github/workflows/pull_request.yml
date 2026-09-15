@@ -66,13 +66,14 @@ jobs:
                 git diff --exit-code
 
     tests:
-        name: Test (${{ matrix.runs-on }})
+        name: Test with libddwaf release binaries (${{ matrix.runs-on }})
         strategy:
             matrix:
                 runs-on:
                     - ubuntu-latest
                     - macos-latest
                     - ubuntu-24.04-arm
+                    - windows-latest
         runs-on: ${{ matrix.runs-on }}
         steps:
             - name: Checkout
@@ -92,10 +93,14 @@ jobs:
                   key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
                   restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
             - name: Run Tests
-              run: make test
+              run: cargo test --all-targets && cargo test --doc
+            - name: Run Dynamic Tests
+              run: cargo test --all-targets --features dynamic
+            - name: Run Dynamic Link Tests
+              run: cargo test --all-targets --features dynamic-link
 
-    source-tests:
-        name: Source (${{ matrix.name }})
+    source-tests-linux:
+        name: Tests with libddwaf-src (${{ matrix.name }} | Linux)
         strategy:
             fail-fast: false
             matrix:
@@ -124,8 +129,8 @@ jobs:
                     ~/.rustup/downloads/
                     ~/.rustup/update-hashes/
                     target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-source-${{ matrix.name }}-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-source-${{ matrix.name }}-${{ github.ref_name }}-
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-source-linux-${{ matrix.name }}-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-source-linux-${{ matrix.name }}-${{ github.ref_name }}-
             - name: Run Tests
               env:
                   FEATURES: ${{ matrix.features }}
@@ -151,6 +156,101 @@ jobs:
                   dependencies="$(readelf -d "$test_binary")"
                   echo "$dependencies"
                   if grep -Fq 'Shared library: [libddwaf.so]' <<< "$dependencies"; then
+                    actual=yes
+                  else
+                    actual=no
+                  fi
+                  test "$actual" = "$EXPECTS_LIBDDWAF"
+
+    source-tests-windows:
+        name: Tests with libddwaf-src (${{ matrix.name }} | Windows zigbuild + Wine)
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - name: static
+                      features: source-static
+                      expects_libddwaf: "no"
+                    - name: embedded
+                      features: source-shared,dynamic
+                      expects_libddwaf: "no"
+                    - name: dynamic-link
+                      features: source-shared,dynamic-link
+                      expects_libddwaf: "yes"
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+            - name: Cache
+              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              with:
+                  path: |-
+                    ~/.cargo/bin/
+                    ~/.cargo/git/db/
+                    ~/.cargo/registry/cache/
+                    ~/.cargo/registry/index/
+                    ~/.rustup/downloads/
+                    ~/.rustup/update-hashes/
+                    target/
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-source-windows-zigbuild-0.21.8-${{ matrix.name }}-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-source-windows-zigbuild-0.21.8-${{ matrix.name }}-${{ github.ref_name }}-
+            - name: Install Test Tools
+              run: |-
+                  zig_version=0.14.1
+                  zig_dir="$RUNNER_TEMP/zig"
+                  zig_archive="$RUNNER_TEMP/zig.tar.xz"
+                  curl --fail --location --silent --show-error \
+                    "https://ziglang.org/download/$zig_version/zig-x86_64-linux-$zig_version.tar.xz" \
+                    --output "$zig_archive"
+                  mkdir "$zig_dir"
+                  tar --extract --file "$zig_archive" --directory "$zig_dir" \
+                    --strip-components=1
+                  echo "$zig_dir" >> "$GITHUB_PATH"
+                  rustup target add x86_64-pc-windows-gnu
+                  if ! command -v cargo-zigbuild >/dev/null; then
+                    cargo install cargo-zigbuild --locked --version 0.21.8
+                  fi
+                  sudo apt-get update
+                  sudo apt-get install --yes --no-install-recommends wine
+            - name: Build Tests
+              env:
+                  FEATURES: ${{ matrix.features }}
+              run: |-
+                  mkdir -p target
+                  cargo zigbuild --workspace --all-targets \
+                    --target x86_64-pc-windows-gnu --features "$FEATURES" \
+                    --message-format=json > target/source-test-artifacts.json
+            - name: Run Tests with Wine
+              env:
+                  WINEDEBUG: "-all"
+              run: |-
+                  mapfile -t test_binaries < <(jq -r '
+                    select(
+                      .reason == "compiler-artifact" and
+                      .profile.test and
+                      .executable != null
+                    ) | .executable
+                  ' target/source-test-artifacts.json)
+                  test "${#test_binaries[@]}" -gt 0
+                  for test_binary in "${test_binaries[@]}"; do
+                    wine "$test_binary"
+                  done
+            - name: Verify Linkage
+              env:
+                  EXPECTS_LIBDDWAF: ${{ matrix.expects_libddwaf }}
+              run: |-
+                  test_binary="$(jq -r '
+                    select(
+                      .reason == "compiler-artifact" and
+                      .target.name == "tests" and
+                      (.target.kind | index("test")) and
+                      .executable != null
+                    ) | .executable
+                  ' target/source-test-artifacts.json)"
+                  test -n "$test_binary"
+                  dependencies="$(objdump -p "$test_binary")"
+                  echo "$dependencies"
+                  if grep -Fqi 'DLL Name: ddwaf.dll' <<< "$dependencies"; then
                     actual=yes
                   else
                     actual=no
@@ -225,13 +325,13 @@ jobs:
 
     complete:
         name: Complete
-        needs: [linters, tests, source-tests, docker-tests, coverage, leak-check]
+        needs: [linters, tests, source-tests-linux, source-tests-windows, docker-tests, coverage, leak-check]
         if: '!cancelled()'
         runs-on: ubuntu-latest
         steps:
             - name: Success
-              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.source-tests.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
+              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.source-tests-linux.result == 'success' && needs.source-tests-windows.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
               run: echo 'Success!'
             - name: Failure
-              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.source-tests.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
+              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.source-tests-linux.result != 'success' || needs.source-tests-windows.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
               run: echo 'Failure!' && exit 1

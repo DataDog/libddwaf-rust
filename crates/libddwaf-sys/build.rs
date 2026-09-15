@@ -41,6 +41,12 @@ fn main() {
     let feature_source_shared = env::var("CARGO_FEATURE_SOURCE_SHARED").is_ok();
     let feature_source = feature_source_static || feature_source_shared;
     let libddwaf_prefix = env::var_os("LIBDDWAF_PREFIX");
+    let target_os =
+        env::var("CARGO_CFG_TARGET_OS").expect("CARGO_CFG_TARGET_OS environment variable not set");
+    let target_env = env::var("CARGO_CFG_TARGET_ENV")
+        .expect("CARGO_CFG_TARGET_ENV environment variable not set");
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH")
+        .expect("CARGO_CFG_TARGET_ARCH environment variable not set");
 
     if feature_dynamic && feature_dynamic_link {
         panic!(
@@ -58,6 +64,20 @@ fn main() {
     }
     if feature_source && libddwaf_prefix.is_some() {
         panic!("LIBDDWAF_PREFIX cannot be used with `source-static` or `source-shared`");
+    }
+    if target_os == "windows" && target_arch != "x86_64" {
+        panic!("Unsupported Windows architecture: {target_arch}; only x86_64 is supported");
+    }
+    if target_os == "windows"
+        && target_env == "gnu"
+        && !feature_source_static
+        && !feature_dynamic
+        && !feature_dynamic_link
+    {
+        panic!(
+            "Static linking on Windows GNU targets requires the `source-static` feature because \
+             the prebuilt static library requires the MSVC C++ runtime"
+        );
     }
 
     if cfg!(target_env = "musl") && cfg!(target_feature = "crt-static") {
@@ -105,12 +125,25 @@ fn main() {
         "cargo::rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
+    let windows_dll = target_os == "windows" && (feature_dynamic || feature_dynamic_link);
+    println!("cargo::rustc-check-cfg=cfg(libddwaf_windows_dll)");
+    if windows_dll {
+        println!("cargo::rustc-cfg=libddwaf_windows_dll");
+    }
     if !feature_source {
         if feature_dynamic_link {
             println!("cargo::rustc-link-lib=dylib=ddwaf");
         } else if !feature_dynamic {
-            println!("cargo::rustc-link-lib=static=ddwaf");
+            if target_os == "windows" {
+                println!("cargo::rustc-link-lib=static=ddwaf_static");
+                println!("cargo::rustc-link-lib=dylib=ws2_32");
+            } else {
+                println!("cargo::rustc-link-lib=static=ddwaf");
+            }
         }
+    }
+    if target_os == "windows" && feature_dynamic_link {
+        stage_windows_dll(&out_dir, &lib_dir, soname);
     }
 
     // macOS has libc++ only as a dynamic library, so it is not bundled in
@@ -124,15 +157,24 @@ fn main() {
 
     // if we want to disable this in final binaries, see maybe
     // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
-    println!(
-        "cargo::rustc-link-arg=-Wl,-rpath,{}",
-        lib_dir.to_str().unwrap()
-    );
-
-    #[cfg(target_os = "linux")]
-    println!("cargo::rustc-link-arg=-Wl,-rpath,$ORIGIN");
-    #[cfg(target_os = "macos")]
-    println!("cargo::rustc-link-arg=-Wl,-rpath,@loader_path");
+    match target_os.as_str() {
+        "linux" => {
+            println!(
+                "cargo::rustc-link-arg=-Wl,-rpath,{}",
+                lib_dir.to_str().unwrap()
+            );
+            println!("cargo::rustc-link-arg=-Wl,-rpath,$ORIGIN");
+        }
+        "macos" => {
+            println!(
+                "cargo::rustc-link-arg=-Wl,-rpath,{}",
+                lib_dir.to_str().unwrap()
+            );
+            println!("cargo::rustc-link-arg=-Wl,-rpath,@loader_path");
+        }
+        "windows" => {}
+        target_os => panic!("Unsupported target OS: {target_os}"),
+    }
 
     // Generate bindings with bindgen
     let builder = bindgen::Builder::default()
@@ -143,6 +185,14 @@ fn main() {
         .prepend_enum_name(false)
         // Specifically allow-list supported/useful functions to avoid bloat.
         .allowlist_function("^ddwaf_.*");
+    // This function is in the Windows static library, but libddwaf 2.1.0 does
+    // not export it from ddwaf.dll. A compatible Rust implementation is used
+    // whenever the DLL is selected.
+    let builder = if windows_dll {
+        builder.blocklist_function("^ddwaf_object_set_string_nocopy$")
+    } else {
+        builder
+    };
     let builder = if feature_dynamic {
         let filename = out_dir.join(format!("{soname}.zst"));
         let zstd_file = File::create(&filename).expect("failed to create zstd file");
@@ -223,8 +273,30 @@ fn shared_library_name() -> &'static str {
     match env::var("CARGO_CFG_TARGET_OS").as_deref() {
         Ok("macos") => "libddwaf.dylib",
         Ok("linux") => "libddwaf.so",
+        Ok("windows") => "ddwaf.dll",
         Ok(target_os) => panic!("Unsupported target OS: {target_os}"),
         Err(error) => panic!("CARGO_CFG_TARGET_OS is unavailable: {error}"),
+    }
+}
+
+fn stage_windows_dll(out_dir: &Path, lib_dir: &Path, soname: &str) {
+    // Windows searches beside the executable for dependent DLLs. Cargo places
+    // normal binaries in the profile directory, test binaries in `deps`, and
+    // example binaries in `examples`.
+    let profile_dir = out_dir
+        .ancestors()
+        .nth(3)
+        .expect("OUT_DIR did not contain a Cargo profile directory");
+    let source = lib_dir.join(soname);
+
+    for destination_dir in [
+        profile_dir.to_owned(),
+        profile_dir.join("deps"),
+        profile_dir.join("examples"),
+    ] {
+        fs::create_dir_all(&destination_dir).expect("Failed to create Cargo output directory");
+        fs::copy(&source, destination_dir.join(soname))
+            .expect("Failed to copy ddwaf.dll to Cargo output directory");
     }
 }
 
@@ -233,6 +305,7 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
 
     // Target triple for the current build
     let target = env::var("TARGET").expect("TARGET environment variable not set");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").expect("CARGO_CFG_TARGET_OS unavailable");
 
     // Output directory
     let download_dir = out_dir.join("download").join(&target);
@@ -274,6 +347,10 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
             "x86_64-apple-darwin" => (
                 format!("libddwaf-{version}-darwin-x86_64.tar.gz"),
                 "libddwaf.dylib",
+            ),
+            _ if target_os == "windows" => (
+                format!("libddwaf-{version}-windows-x64.tar.gz"),
+                "ddwaf.dll",
             ),
             target => panic!("Unsupported target platform: {target}"),
         };

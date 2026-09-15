@@ -119,11 +119,6 @@ mod tests {
             eprintln!("Skipping test_get_version: LIBDDWAF_PREFIX is set");
             return;
         }
-        if cfg!(any(feature = "source-static", feature = "source-shared")) {
-            eprintln!("Skipping test_get_version: a source build feature is enabled");
-            return;
-        }
-
         assert_eq!(
             env!("CARGO_PKG_VERSION"),
             version()

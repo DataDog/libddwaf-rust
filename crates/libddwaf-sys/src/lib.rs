@@ -19,6 +19,27 @@ use std::slice;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+#[cfg(libddwaf_windows_dll)]
+#[no_mangle]
+pub unsafe extern "C" fn ddwaf_object_set_string_nocopy(
+    object: *mut ddwaf_object,
+    string: *const std::os::raw::c_char,
+    length: u32,
+) -> *mut ddwaf_object {
+    if object.is_null() || string.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    unsafe {
+        (*object).via.str_ = _ddwaf_object_string {
+            type_: DDWAF_OBJ_STRING as u8,
+            size: length,
+            ptr: string.cast_mut(),
+        };
+    }
+    object
+}
+
 #[cfg(feature = "dynamic")]
 mod dylib;
 #[cfg(feature = "dynamic")]

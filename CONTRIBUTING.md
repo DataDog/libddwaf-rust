@@ -102,6 +102,7 @@ cargo build
 The prefix directory must contain:
 - `include/ddwaf.h` - The header file for bindgen
 - `lib/libddwaf.a` or `lib/libddwaf.so`/`lib/libddwaf.dylib` - The library file
+- On Windows, `lib/ddwaf_static.lib`, or `lib/ddwaf.lib` and `lib/ddwaf.dll`
 
 This is useful for:
 - Testing against a custom build of libddwaf
@@ -109,8 +110,8 @@ This is useful for:
 - Environments where downloading from GitHub is not possible
 
 Note: Some tests that verify version matching will be skipped when
-`LIBDDWAF_PREFIX` is set or a source build feature is enabled, since the
-selected library version may differ from the expected crate version.
+`LIBDDWAF_PREFIX` is set, since the installed version may differ from the
+expected crate version.
 
 ## C++ Runtime Linking
 

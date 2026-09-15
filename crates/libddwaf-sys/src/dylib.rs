@@ -9,16 +9,19 @@ use lazy_static::lazy_static;
 const LIBDDWAF_SHARED_OBJECT: &[u8] = include_bytes!(env!("LIBDDWAF_SHARED_OBJECT.zst"));
 
 lazy_static! {
-    static ref LIBRARY: ddwaf = init().unwrap_or_default();
+    static ref LIBRARY: Option<ddwaf> = init();
 }
 
 /// Initialize the global shared library instance.
 ///
-/// Dumps the shared object blob to a temporary file, then proceeds to load it
+/// Dumps the shared library blob to a temporary file, then proceeds to load it
 /// with the [ddwaf::new].
 fn init() -> Option<ddwaf> {
-    tracing::debug!("dumping embedded libddwaf shared object to a temporary file...");
-    let mut tmp = match tempfile::NamedTempFile::new() {
+    tracing::debug!("dumping embedded libddwaf shared library to a temporary file...");
+    let mut tmp = match tempfile::Builder::new()
+        .suffix(std::env::consts::DLL_SUFFIX)
+        .tempfile()
+    {
         Ok(tmp) => tmp,
         Err(e) => {
             tracing::error!("failed to create temporary file: {e}");
@@ -35,29 +38,30 @@ fn init() -> Option<ddwaf> {
     };
 
     if let Err(e) = copy(&mut decoder, &mut tmp) {
-        eprintln!("failed to write libddwaf shared object to temporay file: {e}");
-        tracing::error!("failed to write libddwaf shared object to temporay file: {e}");
+        eprintln!("failed to write libddwaf shared library to temporary file: {e}");
+        tracing::error!("failed to write libddwaf shared library to temporary file: {e}");
         return None;
     }
     if let Err(e) = tmp.flush() {
-        tracing::error!("failed to flush libddwaf shared object to temporay file: {e}");
+        tracing::error!("failed to flush libddwaf shared library to temporary file: {e}");
         return None;
     }
 
+    let path = tmp.into_temp_path();
     tracing::debug!(
-        "loading libddwaf shared object from temporary file {tmp}",
-        tmp = tmp.path().display()
+        "loading libddwaf shared library from temporary file {path}",
+        path = path.display()
     );
-    match unsafe { ddwaf::new(tmp.path()) } {
-        Ok(lib) => Some(lib),
+    match unsafe { ddwaf::new(&path) } {
+        Ok(api) => Some(api),
         Err(e) => {
-            tracing::error!("failed to load libddwaf shared object: {e}");
+            tracing::error!("failed to load libddwaf shared library: {e}");
             None
         }
     }
 }
 
-/// Re-exports a function from the static [`ddwaf``] instance, so that the API
+/// Re-exports a function from the static [`ddwaf`] instance, so that the API
 /// remains consistent with the one when the `dynamic` feature is not enabled.
 /// All exported functions will be tagged as `extern "C"`, and the body provided
 /// in the macro corresponds to the default value to return when the shared
@@ -68,25 +72,25 @@ macro_rules! reexport {
     ) => {
         $(
             $vis unsafe extern "C" fn $name($($arg_name: $arg_type),*) $(-> $ret_type)? {
-                unsafe { LIBRARY.$name($($arg_name),*) }
-            }
-        )*
-
-        impl Default for ddwaf {
-            #[cold]
-            fn default() -> Self {
-                $(
-                    #[cold]
-                    unsafe extern "C" fn $name($($arg_name: $arg_type),*) $(-> $ret_type)? {$($fallback)?}
-                )*
-
-                Self {
-                    __library: unsafe { libloading::os::unix::Library::from_raw(std::ptr::null_mut()) }.into(),
-                    $($name),*
+                match LIBRARY.as_ref() {
+                    Some(library) => unsafe { library.$name($($arg_name),*) },
+                    None => {$($fallback)?},
                 }
             }
-        }
+        )*
     };
+}
+
+#[cfg(not(libddwaf_windows_dll))]
+pub unsafe extern "C" fn ddwaf_object_set_string_nocopy(
+    object: *mut ddwaf_object,
+    string: *const std::os::raw::c_char,
+    length: u32,
+) -> *mut ddwaf_object {
+    match LIBRARY.as_ref() {
+        Some(library) => unsafe { library.ddwaf_object_set_string_nocopy(object, string, length) },
+        None => std::ptr::null_mut(),
+    }
 }
 
 // Please keep this list alphanumerically sorted for convenience.
@@ -149,7 +153,6 @@ reexport! {
     pub unsafe fn ddwaf_object_set_signed(object: *mut ddwaf_object, value: i64) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_string(object: *mut ddwaf_object, string: *const ::std::os::raw::c_char, length: u32, alloc: ddwaf_allocator) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_string_literal(object: *mut ddwaf_object, string: *const ::std::os::raw::c_char, length: u32) -> *mut ddwaf_object { std::ptr::null_mut() }
-    pub unsafe fn ddwaf_object_set_string_nocopy(object: *mut ddwaf_object, string: *const ::std::os::raw::c_char, length: u32) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_unsigned(object: *mut ddwaf_object, value: u64) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_set_log_cb(cb: ddwaf_log_cb, min_level: DDWAF_LOG_LEVEL) -> bool { false }
     pub unsafe fn ddwaf_subcontext_destroy(subcontext: ddwaf_subcontext) {}
