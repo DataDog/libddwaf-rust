@@ -10,6 +10,9 @@
 #![allow(clippy::unnecessary_cast)] // Bindgen casts bitfield values to their existing type.
 #![allow(clippy::useless_transmute)] // Bindgen emits identity transmutes for unsigned bitfields.
 
+#[cfg(any(feature = "source-static", feature = "source-shared"))]
+extern crate libddwaf_src;
+
 use std::alloc::Layout;
 use std::ptr::null;
 use std::slice;

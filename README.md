@@ -44,6 +44,14 @@ functions (due to their being dynamically dispatched).
 Mutually exclusive with `dynamic`. Plain dynamic linking against the shared `libddwaf` library. The library (called
 `libddwaf.so` on Linux) must be available at runtime through the usual mechanisms of the dynamic linker.
 
-### `link-stdcxx`
-Used to control linking against libstdc++ in Linux; needed under some limited circumstances such as with non-official
-builds of libddwaf. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more details.
+### `source-static`
+
+Builds and statically links `libddwaf` from the sources distributed by the `libddwaf-src` crate instead of downloading
+prebuilt release artifacts. It cannot be combined with `dynamic` or `dynamic-link`.
+
+### `source-shared`
+
+Builds shared `libddwaf` from the sources distributed by the `libddwaf-src` crate. It must be combined with either
+`dynamic` to embed and load the library at runtime, or `dynamic-link` to link it through the system dynamic linker.
+
+The two source features are mutually exclusive, and neither can be used when `LIBDDWAF_PREFIX` is set.

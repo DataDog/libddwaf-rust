@@ -16,6 +16,7 @@ links = "ddwaf"
 lazy_static = { version = "1.5", optional = true }
 libc = "0.2"
 libloading = { version = "0.8", optional = true }
+libddwaf-src = { version = "2.1.0", default-features = false, optional = true }
 tempfile = { version = "3", optional = true }
 tracing = { version = "0.1", optional = true }
 zstd = { version = "0.13", optional = true }
@@ -38,10 +39,20 @@ aws-lc-rs = ["hyper-rustls/aws-lc-rs", "rustls/aws-lc-rs"]
 ring = ["hyper-rustls/ring", "rustls/ring"]
 fips = ["hyper-rustls/fips", "rustls/fips"]
 # Embeds a compressed libddwaf.so and extracts it to a temporary file at runtime, then loads it with libloading/dlopen
-dynamic = ["lazy_static", "libloading", "tempfile", "tracing", "zstd"]
+dynamic = [
+    "lazy_static",
+    "libloading",
+    "libddwaf-src?/manual-link",
+    "tempfile",
+    "tracing",
+    "zstd",
+]
 # Links to libddwaf.so dynamically via the system dynamic linker and rpath (simpler, requires library at runtime)
 dynamic-link = []
-link-stdcxx = []
+# Builds and statically links libddwaf from the libddwaf-src crate
+source-static = ["dep:libddwaf-src", "libddwaf-src/static"]
+# Builds shared libddwaf from the libddwaf-src crate for one of the dynamic modes
+source-shared = ["dep:libddwaf-src", "libddwaf-src/shared"]
 
 [lints]
 workspace = true

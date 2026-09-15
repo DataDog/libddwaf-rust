@@ -94,6 +94,69 @@ jobs:
             - name: Run Tests
               run: make test
 
+    source-tests:
+        name: Source (${{ matrix.name }})
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - name: static
+                      features: source-static
+                      expects_libddwaf: "no"
+                    - name: embedded
+                      features: source-shared,dynamic
+                      expects_libddwaf: "no"
+                    - name: dynamic-link
+                      features: source-shared,dynamic-link
+                      expects_libddwaf: "yes"
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+            - name: Cache
+              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              with:
+                  path: |-
+                    ~/.cargo/bin/
+                    ~/.cargo/git/db/
+                    ~/.cargo/registry/cache/
+                    ~/.cargo/registry/index/
+                    ~/.rustup/downloads/
+                    ~/.rustup/update-hashes/
+                    target/
+                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-source-${{ matrix.name }}-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
+                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-source-${{ matrix.name }}-${{ github.ref_name }}-
+            - name: Run Tests
+              env:
+                  FEATURES: ${{ matrix.features }}
+              run: |-
+                  cargo test --workspace --all-targets --features "$FEATURES"
+                  cargo test --workspace --doc --features "$FEATURES"
+            - name: Verify Linkage
+              env:
+                  EXPECTS_LIBDDWAF: ${{ matrix.expects_libddwaf }}
+                  FEATURES: ${{ matrix.features }}
+              run: |-
+                  cargo test -p libddwaf-sys --test tests --features "$FEATURES" \
+                    --no-run --message-format=json > target/source-test-artifacts.json
+                  test_binary="$(jq -r '
+                    select(
+                      .reason == "compiler-artifact" and
+                      .target.name == "tests" and
+                      (.target.kind | index("test")) and
+                      .executable != null
+                    ) | .executable
+                  ' target/source-test-artifacts.json)"
+                  test -n "$test_binary"
+                  dependencies="$(readelf -d "$test_binary")"
+                  echo "$dependencies"
+                  if grep -Fq 'Shared library: [libddwaf.so]' <<< "$dependencies"; then
+                    actual=yes
+                  else
+                    actual=no
+                  fi
+                  test "$actual" = "$EXPECTS_LIBDDWAF"
+
     docker-tests:
         name: Tests (${{ matrix.variant}} | ${{ matrix.runs-on == 'ubuntu-latest' && 'x86_64' || 'aarch64' }})
         strategy:
@@ -162,13 +225,13 @@ jobs:
 
     complete:
         name: Complete
-        needs: [linters, tests, docker-tests, coverage, leak-check]
+        needs: [linters, tests, source-tests, docker-tests, coverage, leak-check]
         if: '!cancelled()'
         runs-on: ubuntu-latest
         steps:
             - name: Success
-              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
+              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.source-tests.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
               run: echo 'Success!'
             - name: Failure
-              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
+              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.source-tests.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
               run: echo 'Failure!' && exit 1

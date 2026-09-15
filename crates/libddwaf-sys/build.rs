@@ -37,11 +37,27 @@ fn main() {
 
     let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
     let feature_dynamic_link = env::var("CARGO_FEATURE_DYNAMIC_LINK").is_ok();
+    let feature_source_static = env::var("CARGO_FEATURE_SOURCE_STATIC").is_ok();
+    let feature_source_shared = env::var("CARGO_FEATURE_SOURCE_SHARED").is_ok();
+    let feature_source = feature_source_static || feature_source_shared;
+    let libddwaf_prefix = env::var_os("LIBDDWAF_PREFIX");
 
     if feature_dynamic && feature_dynamic_link {
         panic!(
             "The `dynamic` and `dynamic-link` features are mutually exclusive. Please enable only one."
         );
+    }
+    if feature_source_static && feature_source_shared {
+        panic!("The `source-static` and `source-shared` features are mutually exclusive");
+    }
+    if feature_source_static && (feature_dynamic || feature_dynamic_link) {
+        panic!("The `source-static` feature cannot be combined with `dynamic` or `dynamic-link`");
+    }
+    if feature_source_shared && !(feature_dynamic || feature_dynamic_link) {
+        panic!("The `source-shared` feature requires either `dynamic` or `dynamic-link`");
+    }
+    if feature_source && libddwaf_prefix.is_some() {
+        panic!("LIBDDWAF_PREFIX cannot be used with `source-static` or `source-shared`");
     }
 
     if cfg!(target_env = "musl") && cfg!(target_feature = "crt-static") {
@@ -67,17 +83,19 @@ fn main() {
         println!("cargo::warning=All dependency checks passed. No forbidden dependencies found!");
     }
 
-    // Ensure reqwest is able to use a crypto provider (no default is set so it's easier to maintain FIPS compliance)
-    install_crypto_provider();
-
     // Read the Rust crate version from the environment variable set by Cargo
     let version =
         env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION environment variable not set");
 
-    // Check if a custom libddwaf installation prefix is provided
-    let (include_dir, lib_dir, soname) = if let Some(prefix) = env::var_os("LIBDDWAF_PREFIX") {
+    // Select where libddwaf's headers and libraries come from.
+    let (include_dir, lib_dir, soname) = if feature_source {
+        from_libddwaf_src()
+    } else if let Some(prefix) = libddwaf_prefix {
         from_installed_libddwaf(&prefix)
     } else {
+        // No default provider is enabled in reqwest, which makes it easier to
+        // maintain FIPS compliance. Install one before downloading a release.
+        install_crypto_provider();
         from_github_release(&version, &out_dir)
     };
     println!("cargo::rerun-if-env-changed=LIBDDWAF_PREFIX");
@@ -87,22 +105,21 @@ fn main() {
         "cargo::rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
-    if feature_dynamic_link {
-        println!("cargo::rustc-link-lib=dylib=ddwaf");
-    } else if !feature_dynamic {
-        println!("cargo::rustc-link-lib=static=ddwaf");
+    if !feature_source {
+        if feature_dynamic_link {
+            println!("cargo::rustc-link-lib=dylib=ddwaf");
+        } else if !feature_dynamic {
+            println!("cargo::rustc-link-lib=static=ddwaf");
+        }
     }
 
-    // macOS has libc++ only as a dynamic library, so it's not bundled in libddwaf.a/.so.
-    // Linux needs to link against libstdc++ for C++ standard library symbols
-    // This can be controlled via the `link-stdcxx` feature
+    // macOS has libc++ only as a dynamic library, so it is not bundled in
+    // libddwaf.a/.dylib.
     // Note: We check the TARGET environment variable, not cfg!(target_os), because
     // cfg! evaluates for the build script's host, not the cross-compilation target
     let target = env::var("TARGET").expect("TARGET environment variable not set");
     if target.contains("apple") || target.contains("darwin") {
         println!("cargo::rustc-link-lib=c++");
-    } else if target.contains("linux") && env::var("CARGO_FEATURE_LINK_STDCXX").is_ok() {
-        println!("cargo::rustc-link-lib=static=stdc++");
     }
 
     // if we want to disable this in final binaries, see maybe
@@ -157,6 +174,30 @@ fn main() {
     println!("cargo::rerun-if-changed=build.rs");
 }
 
+fn from_libddwaf_src() -> (PathBuf, PathBuf, &'static str) {
+    let include_dir = PathBuf::from(
+        env::var_os("DEP_DDWAF_SRC_INCLUDE")
+            .expect("libddwaf-src did not export its include directory"),
+    );
+    let lib_dir = PathBuf::from(
+        env::var_os("DEP_DDWAF_SRC_LIB")
+            .expect("libddwaf-src did not export its library directory"),
+    );
+
+    assert!(
+        include_dir.join("ddwaf.h").is_file(),
+        "libddwaf-src did not build ddwaf.h under {}",
+        include_dir.display()
+    );
+    assert!(
+        lib_dir.is_dir(),
+        "libddwaf-src did not build its libraries under {}",
+        lib_dir.display()
+    );
+
+    (include_dir, lib_dir, shared_library_name())
+}
+
 fn from_installed_libddwaf(prefix: impl AsRef<OsStr>) -> (PathBuf, PathBuf, &'static str) {
     println!(
         "cargo::warning=Using libddwaf installation from prefix: {:?}",
@@ -175,13 +216,16 @@ fn from_installed_libddwaf(prefix: impl AsRef<OsStr>) -> (PathBuf, PathBuf, &'st
     }
 
     // Determine the shared library name based on the target platform
-    let soname = if cfg!(target_os = "macos") {
-        "libddwaf.dylib"
-    } else {
-        "libddwaf.so"
-    };
+    (include_dir, lib_dir, shared_library_name())
+}
 
-    (include_dir, lib_dir, soname)
+fn shared_library_name() -> &'static str {
+    match env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("macos") => "libddwaf.dylib",
+        Ok("linux") => "libddwaf.so",
+        Ok(target_os) => panic!("Unsupported target OS: {target_os}"),
+        Err(error) => panic!("CARGO_CFG_TARGET_OS is unavailable: {error}"),
+    }
 }
 
 fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'static str) {

@@ -109,8 +109,8 @@ This is useful for:
 - Environments where downloading from GitHub is not possible
 
 Note: Some tests that verify version matching will be skipped when
-`LIBDDWAF_PREFIX` is set, since the installed version may differ from the
-expected crate version.
+`LIBDDWAF_PREFIX` is set or a source build feature is enabled, since the
+selected library version may differ from the expected crate version.
 
 ## C++ Runtime Linking
 
@@ -123,26 +123,20 @@ automatically links against it:
 cargo::rustc-link-lib=c++
 ```
 
-On Linux, linking against `libstdc++` is controlled via the `link-stdcxx` feature:
+Official Linux releases include their C++ runtime dependencies. If a custom
+`libddwaf` build requires an additional C++ runtime, pass the linker argument
+through Cargo instead:
 
 ```bash
-# Enable static linking to libstdc++
-cargo build --features link-stdcxx
+RUSTFLAGS="-C link-arg=-lstdc++" cargo build
 ```
 
-When enabled, the build script adds:
-```
-cargo::rustc-link-lib=static=stdc++
-```
-
-This is only needed when linking against a dynamic `libddwaf.so` that wasn't
-statically compiled against a C++ runtime or using a `libbdwaf.a` that doesn't
-include the C++ runtime inside. This isn't the case with official libddwaf
-releases.
+This is only needed for a `libddwaf.so` or `libddwaf.a` that was built without
+the required C++ runtime dependency. It is not needed for official releases.
 
 ## Crate Features
 
 For details on available features (`serde`, `dynamic`, `dynamic-link`, `fips`,
-`link-stdcxx`), see the [README](README.md).
+`source-static`, `source-shared`), see the [README](README.md).
 
 # vim: set ts sw=4 ts=4 tw=80:

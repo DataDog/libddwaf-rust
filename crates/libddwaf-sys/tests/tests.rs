@@ -6,9 +6,14 @@ use libddwaf_sys::*;
 
 #[test]
 fn test_version() {
-    // Skip this test if LIBDDWAF_PREFIX is set, as it will use a different version
+    // Skip this test when using an explicit libddwaf source, as it may use a
+    // different version.
     if std::env::var("LIBDDWAF_PREFIX").is_ok() {
         eprintln!("Skipping test_version: LIBDDWAF_PREFIX is set");
+        return;
+    }
+    if cfg!(any(feature = "source-static", feature = "source-shared")) {
+        eprintln!("Skipping test_version: a source build feature is enabled");
         return;
     }
 
