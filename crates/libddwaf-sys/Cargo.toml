@@ -16,6 +16,7 @@ links = "ddwaf"
 lazy_static = { version = "1.5", optional = true }
 libc = "0.2"
 libloading = { version = "0.8", optional = true }
+libddwaf-src = { version = "2.1.0", default-features = false, optional = true }
 tempfile = { version = "3", optional = true }
 tracing = { version = "0.1", optional = true }
 zstd = { version = "0.13", optional = true }
@@ -27,6 +28,8 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 tar = "0.4"
 hyper-rustls = { version = "0.27", default-features = false }
 rustls = { version = "0.23", default-features = false }
+# 0.8.3 uses an API newer than the workspace's Rust 1.85 MSRV.
+yoke-derive = "=0.8.2"
 zstd = "0.13"
 
 [features]
@@ -37,11 +40,21 @@ default = ["aws-lc-rs"]
 aws-lc-rs = ["hyper-rustls/aws-lc-rs", "rustls/aws-lc-rs"]
 ring = ["hyper-rustls/ring", "rustls/ring"]
 fips = ["hyper-rustls/fips", "rustls/fips"]
-# Embeds a compressed libddwaf.so and extracts it to a temporary file at runtime, then loads it with libloading/dlopen
-dynamic = ["lazy_static", "libloading", "tempfile", "tracing", "zstd"]
-# Links to libddwaf.so dynamically via the system dynamic linker and rpath (simpler, requires library at runtime)
+# Embeds a compressed libddwaf shared library and extracts it to a temporary file at runtime, then loads it with libloading
+dynamic = [
+    "lazy_static",
+    "libloading",
+    "libddwaf-src?/manual-link",
+    "tempfile",
+    "tracing",
+    "zstd",
+]
+# Links to the libddwaf shared library dynamically (simpler, requires the library at runtime)
 dynamic-link = []
-link-stdcxx = []
+# Builds and statically links libddwaf from source; required for Windows GNU static linking
+source-static = ["dep:libddwaf-src", "libddwaf-src/static"]
+# Builds shared libddwaf from the libddwaf-src crate for one of the dynamic modes
+source-shared = ["dep:libddwaf-src", "libddwaf-src/shared"]
 
 [lints]
 workspace = true

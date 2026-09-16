@@ -24,12 +24,16 @@ fn test_known_addresses() {
     assert!(builder.add_or_update_config("rules", std::sync::LazyLock::force(&ARACHNI_RULE), None));
     let waf = builder.build().unwrap();
 
-    let addresses = waf.known_addresses();
+    let mut addresses = waf
+        .known_addresses()
+        .into_iter()
+        .map(|address| address.to_str().unwrap())
+        .collect::<Vec<_>>();
+    addresses.sort_unstable();
     assert!(!addresses.is_empty());
     assert_eq!(addresses.len(), 2);
-    assert_eq!(addresses[0].to_str(), Ok("server.request.body"));
     assert_eq!(
-        addresses[1].to_str(),
-        Ok("server.request.headers.no_cookies")
+        addresses,
+        ["server.request.body", "server.request.headers.no_cookies"]
     );
 }

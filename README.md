@@ -21,12 +21,21 @@ cryptographic provider for TLS, and this requires headers for the C standard lib
 [aws-lc-rs]: https://crates.io/crates/aws-lc-rs
 
 ### Clang
-The `libddwaf-sys` crate uses [`bindgen`][bindgen], which requires `libclang.so` to be available.
+The `libddwaf-sys` crate uses [`bindgen`][bindgen], which requires the libclang shared library to be available.
 - On `debian`-based platforms, this is provided by `apt install -y libclang-dev`
 - On `alpine`-based platforms, this is provided by `apk add clang-libclang`
+- On Windows, install LLVM and set `LIBCLANG_PATH` to its `bin` directory if libclang is not discovered automatically
 
 
 [bindgen]: https://crates.io/crates/bindgen
+
+## Windows
+
+Windows x86-64 targets are supported and use static linking by default. MSVC targets can use the prebuilt static
+library, but GNU targets must enable `source-static` for static linking because the release static library depends on
+the MSVC C++ runtime. GNU targets can explicitly enable `dynamic` to embed `ddwaf.dll`, or `dynamic-link` to link it
+dynamically. For `dynamic-link`, copy `ddwaf.dll` alongside an executable when redistributing it; the build script does
+this automatically for Cargo's binaries and test executables.
 
 
 ## Crate Features
@@ -42,8 +51,18 @@ functions (due to their being dynamically dispatched).
 
 ### `dynamic-link`
 Mutually exclusive with `dynamic`. Plain dynamic linking against the shared `libddwaf` library. The library (called
-`libddwaf.so` on Linux) must be available at runtime through the usual mechanisms of the dynamic linker.
+`libddwaf.so` on Linux and `ddwaf.dll` on Windows) must be available at runtime through the usual mechanisms of the
+dynamic linker.
 
-### `link-stdcxx`
-Used to control linking against libstdc++ in Linux; needed under some limited circumstances such as with non-official
-builds of libddwaf. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more details.
+### `source-static`
+
+Builds and statically links `libddwaf` from the sources distributed by the `libddwaf-src` crate instead of downloading
+prebuilt release artifacts. This feature is required for static linking on Windows GNU targets. It cannot be combined
+with `dynamic` or `dynamic-link`.
+
+### `source-shared`
+
+Builds shared `libddwaf` from the sources distributed by the `libddwaf-src` crate. It must be combined with either
+`dynamic` to embed and load the library at runtime, or `dynamic-link` to link it through the system dynamic linker.
+
+The two source features are mutually exclusive, and neither can be used when `LIBDDWAF_PREFIX` is set.
