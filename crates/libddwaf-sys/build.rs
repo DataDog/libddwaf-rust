@@ -1,12 +1,14 @@
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Read};
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
+use std::thread::sleep;
+use std::time::Duration;
 
 use flate2::read::GzDecoder;
-use reqwest::blocking::get;
+use reqwest::blocking::{get, Response};
 use tar::Archive;
 
 // Crypto provider for the build script's own downloader. Chooses whichever of
@@ -119,6 +121,7 @@ fn main() {
         from_github_release(&version, &out_dir)
     };
     println!("cargo::rerun-if-env-changed=LIBDDWAF_PREFIX");
+    println!("cargo::rerun-if-env-changed=LIBDDWAF_CACHE_DIR");
 
     // Add library search path and link directive
     println!(
@@ -357,13 +360,8 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
 
         // Construct the download URL
         let archive_url = format!("{base_url}/{version}/{archive_name}");
-        let response = get(&archive_url).expect("Failed to download archive");
-        assert!(
-            response.status().is_success(),
-            "Failed to download archive from {archive_url}: {status}",
-            status = response.status()
-        );
-        (response, soname, false)
+        let archive = obtain_archive(&archive_url, &archive_name);
+        (archive, soname, false)
     };
 
     // Extract the archive
@@ -371,7 +369,7 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
     if is_override || !include_dir.exists() || !lib_dir.exists() {
         fs::create_dir_all(&download_dir).expect("Failed to create extraction directory");
 
-        let reader = GzDecoder::new(archive);
+        let reader = GzDecoder::new(archive.as_slice());
         let mut tar = Archive::new(reader);
         for entry in tar.entries().expect("Failed to get tar archive entries") {
             let mut entry = entry.expect("Failed to get tar archive entry");
@@ -433,6 +431,69 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
     }
 
     (include_dir, lib_dir, soname)
+}
+
+/// Returns the contents of the release archive named `archive_name`, served
+/// from `url`. If `LIBDDWAF_CACHE_DIR` is set, a cached copy is used when
+/// present, and a freshly downloaded archive is stashed there for next time.
+fn obtain_archive(url: &str, archive_name: &str) -> Vec<u8> {
+    let cache_path =
+        env::var_os("LIBDDWAF_CACHE_DIR").map(|dir| PathBuf::from(dir).join(archive_name));
+
+    if let Some(cache_path) = &cache_path {
+        if let Ok(bytes) = fs::read(cache_path) {
+            println!(
+                "cargo::warning=Using cached archive at {}",
+                cache_path.display()
+            );
+            return bytes;
+        }
+    }
+
+    let mut response = download_with_retry(url);
+    let mut bytes = Vec::new();
+    response
+        .read_to_end(&mut bytes)
+        .expect("Failed to read downloaded archive");
+
+    if let Some(cache_path) = &cache_path {
+        if let Some(parent) = cache_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Err(error) = fs::write(cache_path, &bytes) {
+            println!(
+                "cargo::warning=Failed to cache archive at {}: {error}",
+                cache_path.display()
+            );
+        }
+    }
+
+    bytes
+}
+
+/// Downloads `url`, retrying transient failures (connection errors, timeouts,
+/// non-2xx statuses) a few times with a short backoff, since GitHub release
+/// asset downloads are occasionally flaky in CI.
+fn download_with_retry(url: &str) -> Response {
+    const MAX_ATTEMPTS: u32 = 4;
+
+    let mut last_error = String::new();
+    for attempt in 1..=MAX_ATTEMPTS {
+        last_error = match get(url) {
+            Ok(response) if response.status().is_success() => return response,
+            Ok(response) => format!("HTTP status {}", response.status()),
+            Err(error) => error.to_string(),
+        };
+
+        if attempt < MAX_ATTEMPTS {
+            let backoff = Duration::from_secs(1 << attempt);
+            println!(
+                "cargo::warning=Attempt {attempt}/{MAX_ATTEMPTS} to download {url} failed ({last_error}); retrying in {backoff:?}"
+            );
+            sleep(backoff);
+        }
+    }
+    panic!("Failed to download {url} after {MAX_ATTEMPTS} attempts: {last_error}");
 }
 
 /// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.
