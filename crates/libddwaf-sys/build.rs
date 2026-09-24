@@ -9,6 +9,9 @@ use flate2::read::GzDecoder;
 use reqwest::blocking::get;
 use tar::Archive;
 
+const GITHUB_RELEASE_BASE_URL: &str = "https://github.com/DataDog/libddwaf/releases/download";
+const DEPOT_RELEASE_BASE_URL: &str = "https://depot-read-api-github-releases.us1.ddbuild.io/internal/mirror/github-releases/DataDog/libddwaf/releases/download";
+
 // Crypto provider for the build script's own downloader. Chooses whichever of
 // the `aws-lc-rs`/`ring` features is active (aws-lc-rs takes priority if both
 // are somehow enabled); this is independent of the linked libddwaf itself.
@@ -116,9 +119,10 @@ fn main() {
         // No default provider is enabled in reqwest, which makes it easier to
         // maintain FIPS compliance. Install one before downloading a release.
         install_crypto_provider();
-        from_github_release(&version, &out_dir)
+        from_release(&version, &out_dir)
     };
     println!("cargo::rerun-if-env-changed=LIBDDWAF_PREFIX");
+    println!("cargo::rerun-if-env-changed=GITLAB_CI");
 
     // Add library search path and link directive
     println!(
@@ -300,8 +304,8 @@ fn stage_windows_dll(out_dir: &Path, lib_dir: &Path, soname: &str) {
     }
 }
 
-fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'static str) {
-    // Download and extract libddwaf from GitHub releases
+fn from_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'static str) {
+    // Download and extract a prebuilt libddwaf release.
 
     // Target triple for the current build
     let target = env::var("TARGET").expect("TARGET environment variable not set");
@@ -313,8 +317,11 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
     let lib_dir = download_dir.join("lib");
 
     let (archive, soname, is_override) = {
-        // Base URL for downloading the library
-        let base_url = "https://github.com/DataDog/libddwaf/releases/download";
+        let base_url = if env::var_os("GITLAB_CI").is_some() {
+            DEPOT_RELEASE_BASE_URL
+        } else {
+            GITHUB_RELEASE_BASE_URL
+        };
 
         // Map the target triple to the correct library archive
         let (archive_name, soname) = match target.as_str() {
