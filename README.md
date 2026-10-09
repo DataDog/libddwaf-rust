@@ -31,11 +31,15 @@ The `libddwaf-sys` crate uses [`bindgen`][bindgen], which requires the libclang 
 
 ## Windows
 
-Windows x86-64 targets are supported and use static linking by default. MSVC targets can use the prebuilt static
-library, but GNU targets must enable `source-static` for static linking because the release static library depends on
-the MSVC C++ runtime. GNU targets can explicitly enable `dynamic` to embed `ddwaf.dll`, or `dynamic-link` to link it
-dynamically. For `dynamic-link`, copy `ddwaf.dll` alongside an executable when redistributing it; the build script does
-this automatically for Cargo's binaries and test executables.
+Windows x86-64, ARM64 and 32-bit x86 targets are supported and use static linking by default. The MSVC targets
+`x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc` and `i686-pc-windows-msvc` use the corresponding `windows-x64`,
+`windows-arm64` and `windows-win32` release archives. When cross-compiling, libclang must match the build host's
+architecture; bindgen selects the target ABI from Cargo's target triple.
+
+MSVC targets can use the prebuilt static library, but GNU targets must enable `source-static` for static linking because
+the release static library depends on the MSVC C++ runtime. GNU targets can explicitly enable `dynamic` to embed
+`ddwaf.dll`, or `dynamic-link` to link it dynamically. For `dynamic-link`, copy `ddwaf.dll` alongside an executable when
+redistributing it; the build script does this automatically for Cargo's binaries and test executables.
 
 
 ## Crate Features
