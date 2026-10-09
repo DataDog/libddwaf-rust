@@ -65,8 +65,8 @@ fn main() {
     if feature_source && libddwaf_prefix.is_some() {
         panic!("LIBDDWAF_PREFIX cannot be used with `source-static` or `source-shared`");
     }
-    if target_os == "windows" && target_arch != "x86_64" {
-        panic!("Unsupported Windows architecture: {target_arch}; only x86_64 is supported");
+    if target_os == "windows" {
+        windows_archive_arch(&target_arch);
     }
     if target_os == "windows"
         && target_env == "gnu"
@@ -279,6 +279,17 @@ fn shared_library_name() -> &'static str {
     }
 }
 
+fn windows_archive_arch(target_arch: &str) -> &'static str {
+    match target_arch {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        "x86" => "win32",
+        _ => panic!(
+            "Unsupported Windows architecture: {target_arch}; supported architectures are x86_64, aarch64 and x86"
+        ),
+    }
+}
+
 fn stage_windows_dll(out_dir: &Path, lib_dir: &Path, soname: &str) {
     // Windows searches beside the executable for dependent DLLs. Cargo places
     // normal binaries in the profile directory, test binaries in `deps`, and
@@ -306,6 +317,7 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
     // Target triple for the current build
     let target = env::var("TARGET").expect("TARGET environment variable not set");
     let target_os = env::var("CARGO_CFG_TARGET_OS").expect("CARGO_CFG_TARGET_OS unavailable");
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH unavailable");
 
     // Output directory
     let download_dir = out_dir.join("download").join(&target);
@@ -349,7 +361,10 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
                 "libddwaf.dylib",
             ),
             _ if target_os == "windows" => (
-                format!("libddwaf-{version}-windows-x64.tar.gz"),
+                format!(
+                    "libddwaf-{version}-windows-{}.tar.gz",
+                    windows_archive_arch(&target_arch)
+                ),
                 "ddwaf.dll",
             ),
             target => panic!("Unsupported target platform: {target}"),

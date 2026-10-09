@@ -690,7 +690,8 @@ fn test_from_json() {
     assert!(WafObject::from_json("").is_none());
     // Invalid JSON (truncated)
     assert!(WafObject::from_json("{").is_none());
-    // Too large (but otherwise valid)
+    // A string larger than u32::MAX cannot be represented on 32-bit targets.
+    #[cfg(target_pointer_width = "64")]
     assert!(WafObject::from_json(format!(r#""{}""#, "a".repeat(u32::MAX as usize + 1))).is_none());
 }
 
