@@ -33,8 +33,11 @@ format_check:
 	cargo fmt -- --check
 .PHONY: format_check
 
+# An explicit --target keeps RUSTFLAGS off host artifacts: recent nightlies refuse to build
+# proc-macro crates with sanitizers enabled.
+leak_check: HOST_TRIPLE = $(shell rustc +nightly -vV | sed -n 's/^host: //p')
 leak_check:
-	RUSTFLAGS="-Zsanitizer=leak" LSAN_OPTIONS="symbolize=1:external_symbolizer_path=/usr/bin/addr2line" cargo +nightly test --all-targets --target-dir target/leak_check
+	RUSTFLAGS="-Zsanitizer=leak" LSAN_OPTIONS="symbolize=1:external_symbolizer_path=/usr/bin/addr2line" cargo +nightly test --all-targets --target $(HOST_TRIPLE) --target-dir target/leak_check
 .PHONY: leak_check
 
 Cargo.lock: Cargo.toml
