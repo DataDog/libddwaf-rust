@@ -17,7 +17,7 @@ libc = "0.2"
 libloading = { version = "0.8", optional = true }
 tempfile = { version = "3", optional = true }
 tracing = { version = "0.1", optional = true }
-zstd = { version = "0.13", optional = true }
+zstd = { version = "0.14.3", optional = true }
 
 [build-dependencies]
 bindgen = "0.72"
@@ -27,7 +27,7 @@ tar = "0.4"
 # Following is to ensure FIPS compliance is possible.
 hyper-rustls = { version = "*", default-features = false, features = ["aws-lc-rs"] }
 rustls = { version = "*", default-features = false, features= ["aws-lc-rs"] }
-zstd = "0.13"
+zstd = "0.14.3"
 
 [features]
 default = []
