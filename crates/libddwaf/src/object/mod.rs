@@ -750,6 +750,51 @@ typed_object!(WafObjectType::String => WafString
         })
     }
 
+    /// Creates a string of `length` bytes and fills its final storage directly.
+    ///
+    /// The callback receives zero-initialized bytes. This avoids an intermediate
+    /// buffer when encoding data, while keeping partially initialized strings safe
+    /// to destroy if the callback panics. Short strings use inline storage.
+    /// Returns `None` if the length exceeds [`u32::MAX`].
+    ///
+    /// # Panics
+    /// Panics if memory allocation fails or the callback panics.
+    #[allow(clippy::cast_possible_truncation)] // Object tags are constants that fit in u8.
+    pub fn new_with(length: usize, fill: impl FnOnce(&mut [u8])) -> Option<Self> {
+        let length32 = u32::try_from(length).ok()?;
+        let mut result = if length <= 14 {
+            Self::new(&[0u8; 14][..length])?
+        } else {
+            let layout = Layout::array::<::std::os::raw::c_char>(length).ok()?;
+            let ptr = unsafe { std::alloc::alloc_zeroed(layout) };
+            if ptr.is_null() {
+                std::alloc::handle_alloc_error(layout);
+            }
+            Self {
+                raw: libddwaf_sys::ddwaf_object {
+                    via: libddwaf_sys::_ddwaf_object__bindgen_ty_1 {
+                        str_: libddwaf_sys::_ddwaf_object_string {
+                            type_: libddwaf_sys::DDWAF_OBJ_STRING as u8,
+                            size: length32,
+                            ptr: ptr.cast(),
+                        },
+                    },
+                },
+            }
+        };
+        // SAFETY: both representations own exactly `length` initialized bytes.
+        let bytes = unsafe {
+            let ptr = if length <= 14 {
+                result.raw.via.sstr.data.as_mut_ptr().cast()
+            } else {
+                result.raw.via.str_.ptr.cast()
+            };
+            std::slice::from_raw_parts_mut(ptr, length)
+        };
+        fill(bytes);
+        Some(result)
+    }
+
     /// Creates a new [`WafString`] with the provided static value.
     ///
     /// # Panics

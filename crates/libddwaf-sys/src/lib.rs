@@ -40,9 +40,14 @@ pub unsafe extern "C" fn ddwaf_object_set_string_nocopy(
     object
 }
 
-#[cfg(feature = "dynamic")]
+#[cfg(feature = "dynamic-manual")]
+mod manual;
+#[cfg(feature = "dynamic-manual")]
+pub use manual::{load_library, LoadError};
+
+#[cfg(any(feature = "dynamic", feature = "dynamic-manual"))]
 mod dylib;
-#[cfg(feature = "dynamic")]
+#[cfg(any(feature = "dynamic", feature = "dynamic-manual"))]
 pub use dylib::*;
 
 // Implement [Send] and [Sync] for [ddwaf_object]. There is nothing thread unsafe about these unless

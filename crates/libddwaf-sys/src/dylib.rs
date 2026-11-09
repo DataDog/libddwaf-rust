@@ -1,13 +1,17 @@
 #![allow(clippy::missing_safety_doc)]
 
+#[cfg(feature = "dynamic")]
 use std::io::{copy, Write};
 
 use crate::*;
 
+#[cfg(feature = "dynamic")]
 use lazy_static::lazy_static;
 
+#[cfg(feature = "dynamic")]
 const LIBDDWAF_SHARED_OBJECT: &[u8] = include_bytes!(env!("LIBDDWAF_SHARED_OBJECT.zst"));
 
+#[cfg(feature = "dynamic")]
 lazy_static! {
     static ref LIBRARY: Option<ddwaf> = init();
 }
@@ -16,6 +20,7 @@ lazy_static! {
 ///
 /// Dumps the shared library blob to a temporary file, then proceeds to load it
 /// with the [ddwaf::new].
+#[cfg(feature = "dynamic")]
 fn init() -> Option<ddwaf> {
     tracing::debug!("dumping embedded libddwaf shared library to a temporary file...");
     let mut tmp = match tempfile::Builder::new()
@@ -61,6 +66,17 @@ fn init() -> Option<ddwaf> {
     }
 }
 
+fn library() -> Option<&'static ddwaf> {
+    #[cfg(feature = "dynamic")]
+    {
+        LIBRARY.as_ref()
+    }
+    #[cfg(feature = "dynamic-manual")]
+    {
+        crate::manual::LIBRARY.get()
+    }
+}
+
 /// Re-exports a function from the static [`ddwaf`] instance, so that the API
 /// remains consistent with the one when the `dynamic` feature is not enabled.
 /// All exported functions will be tagged as `extern "C"`, and the body provided
@@ -72,7 +88,7 @@ macro_rules! reexport {
     ) => {
         $(
             $vis unsafe extern "C" fn $name($($arg_name: $arg_type),*) $(-> $ret_type)? {
-                match LIBRARY.as_ref() {
+                match library() {
                     Some(library) => unsafe { library.$name($($arg_name),*) },
                     None => {$($fallback)?},
                 }
@@ -87,7 +103,7 @@ pub unsafe extern "C" fn ddwaf_object_set_string_nocopy(
     string: *const std::os::raw::c_char,
     length: u32,
 ) -> *mut ddwaf_object {
-    match LIBRARY.as_ref() {
+    match library() {
         Some(library) => unsafe { library.ddwaf_object_set_string_nocopy(object, string, length) },
         None => std::ptr::null_mut(),
     }

@@ -875,3 +875,25 @@ fn test_map_from_large_array() {
         .join()
         .unwrap();
 }
+
+#[test]
+fn string_fill_final_storage() {
+    for size in [0, 1, 14, 15, 4096] {
+        let string = WafString::new_with(size, |bytes| {
+            assert!(bytes.iter().all(|&b| b == 0));
+            bytes.fill(0xff);
+        })
+        .unwrap();
+        assert_eq!(string.as_bytes(), vec![0xff; size]);
+        assert_eq!(string.clone().as_bytes(), string.as_bytes());
+    }
+    for size in [14, 15, 4096] {
+        let result = std::panic::catch_unwind(|| {
+            WafString::new_with(size, |bytes| {
+                bytes[0] = 1;
+                panic!("conversion interrupted");
+            });
+        });
+        assert!(result.is_err());
+    }
+}
