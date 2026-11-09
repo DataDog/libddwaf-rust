@@ -7,6 +7,7 @@ use std::process::{exit, Command};
 
 use flate2::read::GzDecoder;
 use reqwest::blocking::get;
+use sha2::{Digest, Sha256};
 use tar::Archive;
 
 // Crypto provider for the build script's own downloader. Chooses whichever of
@@ -281,7 +282,7 @@ fn from_installed_libddwaf(prefix: impl AsRef<OsStr>) -> (PathBuf, PathBuf, &'st
 fn shared_library_name() -> &'static str {
     match env::var("CARGO_CFG_TARGET_OS").as_deref() {
         Ok("macos") => "libddwaf.dylib",
-        Ok("linux") => "libddwaf.so",
+        Ok("linux" | "freebsd") => "libddwaf.so",
         Ok("windows") => "ddwaf.dll",
         Ok(target_os) => panic!("Unsupported target OS: {target_os}"),
         Err(error) => panic!("CARGO_CFG_TARGET_OS is unavailable: {error}"),
@@ -387,7 +388,37 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
             "Failed to download archive from {archive_url}: {status}",
             status = response.status()
         );
-        (response, soname, false)
+        let archive = response.bytes().expect("Failed to read libddwaf archive");
+        let expected = match archive_name.as_str() {
+            "libddwaf-2.1.0-aarch64-linux-musl.tar.gz" => {
+                "ba4a51e3c96ab3421d0c83c4b711cf2ade47aa5c986653c4c66527feffd80bec"
+            }
+            "libddwaf-2.1.0-x86_64-linux-musl.tar.gz" => {
+                "b1a4a57098ec86d8e07036ecd9a43f4fc3b3d4497924c9ceffd91089647ab2ac"
+            }
+            "libddwaf-2.1.0-darwin-arm64.tar.gz" => {
+                "bba0f952f3bd119b10008d3a2e9f263bed892bccd5eee3e5ea576336b6978651"
+            }
+            "libddwaf-2.1.0-darwin-x86_64.tar.gz" => {
+                "3ca7bd84c2d4220379a1f0ca4b42fc93677beeec99675c951f301e80885a1281"
+            }
+            "libddwaf-2.1.0-windows-arm64.tar.gz" => {
+                "124247affb836e0f042514b29bf8258ee77967207c4504c3c6c1ffecc212264f"
+            }
+            "libddwaf-2.1.0-windows-win32.tar.gz" => {
+                "e4cbd6f26656f4d98a5e4ccb276b15009a076486b1d36cead897d4c66cf3fb82"
+            }
+            "libddwaf-2.1.0-windows-x64.tar.gz" => {
+                "b7cd03f964e5bf0de1a1191b26a33c04adaea714ef94952f7a8b44a70060b8d3"
+            }
+            _ => panic!("No pinned checksum for {archive_name}"),
+        };
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&archive)),
+            expected,
+            "libddwaf archive checksum mismatch"
+        );
+        (io::Cursor::new(archive), soname, false)
     };
 
     // Extract the archive
