@@ -29,7 +29,7 @@ fn exercise_waf() {
     };
     assert!(builder.add_or_update_config("rules", &rules, None));
     let handle = builder.build().unwrap();
-    let mut context = handle.new_context();
+    let mut context = handle.try_new_context().expect("native context allocation");
     assert!(matches!(
         context.run(waf_map! { ("input", "attack") }, Duration::from_secs(1)),
         Ok(RunResult::Match(_))
