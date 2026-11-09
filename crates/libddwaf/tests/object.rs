@@ -693,7 +693,7 @@ fn test_from_json() {
     // A string larger than u32::MAX cannot be represented on 32-bit targets.
     #[cfg(target_pointer_width = "64")]
     {
-        // Avoid heap reallocation near 4 GiB on Windows ARM64.
+        // Allocate once: HeapReAlloc near 4 GiB failed on Windows ARM64 CI; HeapAlloc worked.
         let len = u32::MAX as usize + 3;
         let mut json = vec![b'a'; len];
         json[0] = b'"';
