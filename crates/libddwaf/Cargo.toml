@@ -23,8 +23,6 @@ fips = ["libddwaf-sys/fips"]
 serde = ["dep:serde"]
 # Embeds libddwaf and loads it at runtime (no external library needed)
 dynamic = ["libddwaf-sys/dynamic"]
-# Loads a caller-selected shared library through load_library
-dynamic-manual = ["libddwaf-sys/dynamic-manual"]
 # Links to libddwaf dynamically via the system linker (requires the shared library at runtime)
 dynamic-link = ["libddwaf-sys/dynamic-link"]
 # Build and statically link libddwaf from source; required for Windows GNU static linking

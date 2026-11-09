@@ -50,8 +50,6 @@ dynamic = [
     "tracing",
     "zstd",
 ]
-# Loads a caller-selected shared library explicitly at runtime, without embedding it
-dynamic-manual = ["libloading"]
 # Links to the libddwaf shared library dynamically (simpler, requires the library at runtime)
 dynamic-link = []
 # Builds and statically links libddwaf from source; required for Windows GNU static linking

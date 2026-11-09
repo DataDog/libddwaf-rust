@@ -22,8 +22,6 @@
 //!     2. Call [`Context::run`] as appropriate with the necessary address data
 //!
 //! ```rust
-//! # #[cfg(feature = "dynamic-manual")]
-//! # unsafe { libddwaf::load_library(None).expect("Failed to load libddwaf"); }
 //! use libddwaf::{
 //!     object::*,
 //!     waf_array,
@@ -79,10 +77,6 @@
 //! ```
 
 use std::ffi::CStr;
-
-#[cfg(feature = "dynamic-manual")]
-#[doc(inline)]
-pub use libddwaf_sys::{load_library, LoadError};
 
 #[cfg(feature = "serde")]
 pub mod serde;
