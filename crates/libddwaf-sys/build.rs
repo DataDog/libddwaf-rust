@@ -37,6 +37,7 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
+    let feature_dynamic_system = env::var("CARGO_FEATURE_DYNAMIC_SYSTEM").is_ok();
     let feature_dynamic_link = env::var("CARGO_FEATURE_DYNAMIC_LINK").is_ok();
     let feature_source_static = env::var("CARGO_FEATURE_SOURCE_STATIC").is_ok();
     let feature_source_shared = env::var("CARGO_FEATURE_SOURCE_SHARED").is_ok();
@@ -49,6 +50,11 @@ fn main() {
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH")
         .expect("CARGO_CFG_TARGET_ARCH environment variable not set");
 
+    if feature_dynamic_system && (feature_source || libddwaf_prefix.is_none()) {
+        panic!(
+            "The `dynamic-system` feature requires LIBDDWAF_PREFIX and cannot use source builds"
+        );
+    }
     if feature_dynamic && feature_dynamic_link {
         panic!(
             "The `dynamic` and `dynamic-link` features are mutually exclusive. Please enable only one."
@@ -152,13 +158,14 @@ fn main() {
     // Note: We check the TARGET environment variable, not cfg!(target_os), because
     // cfg! evaluates for the build script's host, not the cross-compilation target
     let target = env::var("TARGET").expect("TARGET environment variable not set");
-    if target.contains("apple") || target.contains("darwin") {
+    if !feature_dynamic_system && (target.contains("apple") || target.contains("darwin")) {
         println!("cargo::rustc-link-lib=c++");
     }
 
     // if we want to disable this in final binaries, see maybe
     // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
     match target_os.as_str() {
+        _ if feature_dynamic_system => {}
         "linux" => {
             println!(
                 "cargo::rustc-link-arg=-Wl,-rpath,{}",
@@ -194,7 +201,7 @@ fn main() {
     } else {
         builder
     };
-    let builder = if feature_dynamic {
+    if feature_dynamic && !feature_dynamic_system {
         let filename = out_dir.join(format!("{soname}.zst"));
         let zstd_file = File::create(&filename).expect("failed to create zstd file");
         let mut zstd = zstd::Encoder::new(zstd_file, 22).expect("failed to create zstd encoder");
@@ -207,7 +214,8 @@ fn main() {
             "cargo::rustc-env=LIBDDWAF_SHARED_OBJECT.zst={}",
             filename.display()
         );
-
+    }
+    let builder = if feature_dynamic {
         builder
             .dynamic_library_name("ddwaf")
             .dynamic_link_require_all(true)
@@ -273,7 +281,7 @@ fn from_installed_libddwaf(prefix: impl AsRef<OsStr>) -> (PathBuf, PathBuf, &'st
 fn shared_library_name() -> &'static str {
     match env::var("CARGO_CFG_TARGET_OS").as_deref() {
         Ok("macos") => "libddwaf.dylib",
-        Ok("linux") => "libddwaf.so",
+        Ok("linux" | "freebsd") => "libddwaf.so",
         Ok("windows") => "ddwaf.dll",
         Ok(target_os) => panic!("Unsupported target OS: {target_os}"),
         Err(error) => panic!("CARGO_CFG_TARGET_OS is unavailable: {error}"),

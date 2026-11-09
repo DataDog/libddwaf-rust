@@ -49,6 +49,11 @@ useful to reduce the stat-up overhead in case the `libddwaf` features are not al
 features are opt-in); but it increases the size of the final binary & decreases overall performance of using those
 functions (due to their being dynamically dispatched).
 
+### `dynamic-system`
+Enables the `dynamic` loader without embedding a library. Set `LIBDDWAF_PREFIX` to the system development
+package prefix for its header; loading uses the OS search path on first use. Load failures return fallback
+values, including an empty version string, and are cached for the process lifetime.
+
 ### `dynamic-link`
 Mutually exclusive with `dynamic`. Plain dynamic linking against the shared `libddwaf` library. The library (called
 `libddwaf.so` on Linux and `ddwaf.dll` on Windows) must be available at runtime through the usual mechanisms of the

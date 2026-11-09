@@ -50,6 +50,7 @@ dynamic = [
     "tracing",
     "zstd",
 ]
+dynamic-system = ["dynamic"]
 # Links to the libddwaf shared library dynamically (simpler, requires the library at runtime)
 dynamic-link = []
 # Builds and statically links libddwaf from source; required for Windows GNU static linking

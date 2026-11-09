@@ -1,11 +1,13 @@
 #![allow(clippy::missing_safety_doc)]
 
+#[cfg(not(feature = "dynamic-system"))]
 use std::io::{copy, Write};
 
 use crate::*;
 
 use lazy_static::lazy_static;
 
+#[cfg(not(feature = "dynamic-system"))]
 const LIBDDWAF_SHARED_OBJECT: &[u8] = include_bytes!(env!("LIBDDWAF_SHARED_OBJECT.zst"));
 
 lazy_static! {
@@ -16,6 +18,7 @@ lazy_static! {
 ///
 /// Dumps the shared library blob to a temporary file, then proceeds to load it
 /// with the [ddwaf::new].
+#[cfg(not(feature = "dynamic-system"))]
 fn init() -> Option<ddwaf> {
     tracing::debug!("dumping embedded libddwaf shared library to a temporary file...");
     let mut tmp = match tempfile::Builder::new()
@@ -59,6 +62,25 @@ fn init() -> Option<ddwaf> {
             None
         }
     }
+}
+
+#[cfg(feature = "dynamic-system")]
+fn init() -> Option<ddwaf> {
+    let names: &[&str] = if cfg!(target_os = "windows") {
+        &["ddwaf.dll"]
+    } else if cfg!(target_os = "macos") {
+        &["libddwaf.dylib"]
+    } else {
+        &["libddwaf.so.2", "libddwaf.so"]
+    };
+    for name in names {
+        // SAFETY: system library search paths must contain only trusted libddwaf installations.
+        match unsafe { ddwaf::new(name) } {
+            Ok(api) => return Some(api),
+            Err(error) => tracing::error!("failed to load {name}: {error}"),
+        }
+    }
+    None
 }
 
 /// Re-exports a function from the static [`ddwaf`] instance, so that the API
