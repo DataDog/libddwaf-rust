@@ -187,7 +187,8 @@ fn main() {
     let builder = if feature_dynamic {
         let filename = out_dir.join(format!("{soname}.zst"));
         let zstd_file = File::create(&filename).expect("failed to create zstd file");
-        let mut zstd = zstd::Encoder::new(zstd_file, 22).expect("failed to create zstd encoder");
+        let mut zstd = zstd::Encoder::new(zstd_file, embedded_library_compression_level())
+            .expect("failed to create zstd encoder");
 
         let mut so = File::open(lib_dir.join(soname)).expect("failed to open shared object file");
         io::copy(&mut so, &mut zstd).expect("failed to write compressed shared object file");
@@ -213,6 +214,21 @@ fn main() {
         .expect("Failed to write bindings.rs");
 
     println!("cargo::rerun-if-changed=build.rs");
+}
+
+/// zstd level for the shared library embedded by the `dynamic` feature.
+///
+/// Optimized builds use the maximum level, as they are what gets shipped and
+/// every byte ends up in the final binary. Unoptimized builds use a much
+/// cheaper level: the build script's zstd is itself compiled without
+/// optimizations, and at level 22 compressing a debug libddwaf built from
+/// source (which carries its debug info) takes over a minute, versus about a
+/// second at level 12, for a modestly larger result.
+fn embedded_library_compression_level() -> i32 {
+    match env::var("OPT_LEVEL").as_deref() {
+        Ok("0") => 12,
+        _ => 22,
+    }
 }
 
 fn from_libddwaf_src() -> (PathBuf, PathBuf, &'static str) {
