@@ -1,0 +1,100 @@
+name: Release
+
+# Publishes libddwaf-sys and libddwaf to crates.io when a vX.Y.Z tag is pushed.
+# The publish job runs in the `crates-io` environment, whose required reviewers
+# must approve it; it authenticates with crates.io Trusted Publishing, so no
+# long-lived crates.io token is stored in the repository.
+
+on:
+    push:
+        tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+
+jobs:
+    verify:
+        name: Verify Release
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            checks: read
+        outputs:
+            version: ${{ steps.version.outputs.version }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+              with:
+                  fetch-depth: 0
+            - name: Check the Tag Matches the Crate Versions
+              id: version
+              run: |-
+                  version="${GITHUB_REF_NAME#v}"
+                  metadata="$(cargo metadata --no-deps --format-version 1)"
+                  for crate in libddwaf-sys libddwaf; do
+                    crate_version="$(jq -r --arg crate "$crate" \
+                      '.packages[] | select(.name == $crate) | .version' <<< "$metadata")"
+                    if [ "$crate_version" != "$version" ]; then
+                      echo "::error::$crate is at $crate_version, but the tag is $GITHUB_REF_NAME"
+                      exit 1
+                    fi
+                  done
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
+            - name: Check the Tagged Commit Is on main
+              run: |-
+                  if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+                    echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main"
+                    exit 1
+                  fi
+            - name: Check Validation Passed for the Tagged Commit
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |-
+                  # "Complete" is the Validation workflow's final job, which
+                  # only succeeds when every other job did.
+                  conclusion="$(gh api \
+                    "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=Complete" \
+                    --jq '[.check_runs[] | select(.app.slug == "github-actions") | .conclusion] | first')"
+                  if [ "$conclusion" != "success" ]; then
+                    echo "::error::Validation has not passed for $GITHUB_SHA (Complete: ${conclusion:-not found})"
+                    exit 1
+                  fi
+
+    publish:
+        name: Publish to crates.io
+        needs: verify
+        runs-on: ubuntu-latest
+        environment: crates-io
+        permissions:
+            contents: read
+            id-token: write # Trusted Publishing
+        env:
+            VERSION: ${{ needs.verify.outputs.version }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+            - name: Authenticate with crates.io
+              id: auth
+              uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+            - name: Publish
+              env:
+                  CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+              run: |-
+                  # libddwaf depends on the exact libddwaf-sys version, so it
+                  # goes second; cargo waits for libddwaf-sys to be available
+                  # in the index before verifying libddwaf. Versions already on
+                  # crates.io are skipped, so a re-run after a partial failure
+                  # picks up where it stopped.
+                  for crate in libddwaf-sys libddwaf; do
+                    if curl --silent --fail --output /dev/null \
+                      --user-agent "libddwaf-rust release workflow (https://github.com/$GITHUB_REPOSITORY)" \
+                      "https://crates.io/api/v1/crates/$crate/$VERSION"; then
+                      echo "$crate $VERSION is already on crates.io; skipping"
+                      continue
+                    fi
+                    cargo publish --package "$crate"
+                  done
