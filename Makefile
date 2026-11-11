@@ -41,7 +41,7 @@ leak_check:
 .PHONY: leak_check
 
 Cargo.lock: Cargo.toml
-	cargo check
+	cargo metadata --format-version 1 > /dev/null
 
 LICENSE-3rdparty.csv: Cargo.toml Cargo.lock
 	cargo install --locked dd-rust-license-tool
