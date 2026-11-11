@@ -12,10 +12,18 @@ concurrency:
 
 permissions: read-all
 
+env:
+    # Most jobs use ring as the build script's crypto provider: it builds much
+    # faster than the default aws-lc-rs. The Linters job and the Docker-based
+    # tests keep the default, so aws-lc-rs stays covered.
+    CARGO_FEATURE_FLAGS: --no-default-features --features ring --features serde
+
 jobs:
     linters:
         name: Linters
         runs-on: ubuntu-latest
+        env:
+            CARGO_FEATURE_FLAGS: ""
         steps:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -27,6 +35,15 @@ jobs:
               run: make format_check
             - name: Run Clippy
               run: make clippy
+            - name: Check aws-lc-rs is the default crypto provider
+              run: |-
+                  cargo tree --edges normal,build --invert aws-lc-sys --prefix none \
+                    | grep -q '^aws-lc-sys v'
+                  if cargo tree --edges normal,build --invert ring --prefix none 2>/dev/null \
+                    | grep -q '^ring v'; then
+                    echo "ring is in the default dependency graph" >&2
+                    exit 1
+                  fi
 
     licenses:
         name: Licenses
@@ -64,11 +81,11 @@ jobs:
               with:
                   save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Run Tests
-              run: cargo test --all-targets && cargo test --doc
+              run: cargo test --all-targets ${{ env.CARGO_FEATURE_FLAGS }} && cargo test --doc ${{ env.CARGO_FEATURE_FLAGS }}
             - name: Run Dynamic Tests
-              run: cargo test --all-targets --features dynamic
+              run: cargo test --all-targets ${{ env.CARGO_FEATURE_FLAGS }} --features dynamic
             - name: Run Dynamic Link Tests
-              run: cargo test --all-targets --features dynamic-link
+              run: cargo test --all-targets ${{ env.CARGO_FEATURE_FLAGS }} --features dynamic-link
 
     source-tests-linux:
         name: Tests with libddwaf-src (${{ matrix.name }} | Linux)
@@ -98,14 +115,16 @@ jobs:
               env:
                   FEATURES: ${{ matrix.features }}
               run: |-
-                  cargo test --workspace --all-targets --features "$FEATURES"
-                  cargo test --workspace --doc --features "$FEATURES"
+                  cargo test --workspace --all-targets $CARGO_FEATURE_FLAGS --features "$FEATURES"
+                  cargo test --workspace --doc $CARGO_FEATURE_FLAGS --features "$FEATURES"
             - name: Verify Linkage
               env:
                   EXPECTS_LIBDDWAF: ${{ matrix.expects_libddwaf }}
                   FEATURES: ${{ matrix.features }}
               run: |-
-                  cargo test -p libddwaf-sys --test tests --features "$FEATURES" \
+                  # libddwaf-sys has no serde feature; ring alone matches the flags above.
+                  cargo test -p libddwaf-sys --test tests --no-default-features \
+                    --features ring --features "$FEATURES" \
                     --no-run --message-format=json > target/source-test-artifacts.json
                   test_binary="$(jq -r '
                     select(
@@ -171,7 +190,7 @@ jobs:
               run: |-
                   mkdir -p target
                   cargo zigbuild --workspace --all-targets \
-                    --target x86_64-pc-windows-gnu --features "$FEATURES" \
+                    --target x86_64-pc-windows-gnu $CARGO_FEATURE_FLAGS --features "$FEATURES" \
                     --message-format=json > target/source-test-artifacts.json
             - name: Run Tests with Wine
               env:
