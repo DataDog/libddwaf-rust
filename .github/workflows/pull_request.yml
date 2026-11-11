@@ -169,9 +169,9 @@ jobs:
                     echo "$image is already published"
                     exit 0
                   fi
-                  # --network host: name resolution fails in the default build
-                  # network on the runners.
-                  docker build --network host -t "$image" \
+                  # The runners cannot resolve archive.ubuntu.com; use their mirror.
+                  docker build -t "$image" \
+                    --build-arg UBUNTU_MIRROR=http://azure.archive.ubuntu.com/ubuntu \
                     -f .github/docker/windows-gnu.Dockerfile .github/docker
                   docker push "$image"
 
