@@ -144,6 +144,40 @@ jobs:
                   fi
                   test "$actual" = "$EXPECTS_LIBDDWAF"
 
+    windows-gnu-image:
+        name: Windows-GNU tools image
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+        outputs:
+            image: ${{ steps.image.outputs.image }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+            - name: Build and Push if Missing
+              id: image
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |-
+                  # The tag is a hash of the Dockerfile, so this only builds
+                  # when the Dockerfile changed.
+                  image="$(.github/docker/windows-gnu-image-ref.sh)"
+                  echo "image=$image" >> "$GITHUB_OUTPUT"
+                  echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+                  if docker manifest inspect "$image" > /dev/null 2>&1; then
+                    echo "$image is already published"
+                    exit 0
+                  fi
+                  # Azure's resolver (168.63.129.16), which the runner and its
+                  # containers use, has been failing for *.ubuntu.com (SERVFAIL
+                  # or timeouts) while resolving other names fine. Give the
+                  # build's containers public resolvers instead.
+                  echo '{"dns": ["1.1.1.1", "8.8.8.8"]}' | sudo tee /etc/docker/daemon.json
+                  sudo systemctl restart docker
+                  docker build -t "$image" -f .github/docker/windows-gnu.Dockerfile .github/docker
+                  docker push "$image"
+
     source-tests-windows:
         name: Tests with libddwaf-src (${{ matrix.name }} | Windows zigbuild + Wine)
         strategy:
@@ -159,7 +193,10 @@ jobs:
                     - name: dynamic-link
                       features: source-shared,dynamic-link
                       expects_libddwaf: "yes"
+        needs: windows-gnu-image
         runs-on: ubuntu-latest
+        env:
+            WINDOWS_GNU_IMAGE: ${{ needs.windows-gnu-image.outputs.image }}
         steps:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -168,22 +205,28 @@ jobs:
               with:
                   key: source-windows-zigbuild-${{ matrix.name }}
                   save-if: ${{ github.ref == 'refs/heads/main' }}
+                  # Only the windows-gnu standard library: the rest of the
+                  # toolchain ships with the runner image.
+                  cache-directories: ~/.rustup/toolchains/*/lib/rustlib/x86_64-pc-windows-gnu
+            - name: Fetch the Windows-GNU Tools Image
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |-
+                  echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+                  docker pull "$WINDOWS_GNU_IMAGE"
+                  # The build runs on the runner; it only needs zig from the image.
+                  container="$(docker create "$WINDOWS_GNU_IMAGE")"
+                  docker cp "$container:/opt/zig" "$RUNNER_TEMP/zig"
+                  docker rm "$container" > /dev/null
+                  echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
             - name: Install Test Tools
               run: |-
-                  zig_version=0.14.1
-                  zig_dir="$RUNNER_TEMP/zig"
-                  zig_archive="$RUNNER_TEMP/zig.tar.xz"
-                  curl --fail --location --silent --show-error \
-                    "https://ziglang.org/download/$zig_version/zig-x86_64-linux-$zig_version.tar.xz" \
-                    --output "$zig_archive"
-                  mkdir "$zig_dir"
-                  tar --extract --file "$zig_archive" --directory "$zig_dir" \
-                    --strip-components=1
-                  echo "$zig_dir" >> "$GITHUB_PATH"
-                  rustup target add x86_64-pc-windows-gnu
+                  # Restored by the cache when present; rustup would not know,
+                  # as its own bookkeeping under ~/.rustup is not cached.
+                  if [ ! -d "$(rustc --print sysroot)/lib/rustlib/x86_64-pc-windows-gnu" ]; then
+                    rustup target add x86_64-pc-windows-gnu
+                  fi
                   cargo install cargo-zigbuild --locked --version 0.21.8
-                  sudo apt-get update
-                  sudo apt-get install --yes --no-install-recommends wine
             - name: Build Tests
               env:
                   FEATURES: ${{ matrix.features }}
@@ -193,8 +236,6 @@ jobs:
                     --target x86_64-pc-windows-gnu $CARGO_FEATURE_FLAGS --features "$FEATURES" \
                     --message-format=json > target/source-test-artifacts.json
             - name: Run Tests with Wine
-              env:
-                  WINEDEBUG: "-all"
               run: |-
                   mapfile -t test_binaries < <(jq -r '
                     select(
@@ -204,9 +245,13 @@ jobs:
                     ) | .executable
                   ' target/source-test-artifacts.json)
                   test "${#test_binaries[@]}" -gt 0
-                  for test_binary in "${test_binaries[@]}"; do
-                    wine "$test_binary"
-                  done
+                  # Run as the runner's user so nothing root-owned lands in target/.
+                  docker run --rm --user "$(id -u):$(id -g)" --env HOME=/tmp \
+                    --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+                    --workdir "$GITHUB_WORKSPACE" "$WINDOWS_GNU_IMAGE" \
+                    sh -ec 'export WINEPREFIX="$(mktemp -d)"
+                      for test_binary; do wine "$test_binary"; done' \
+                    sh "${test_binaries[@]}"
             - name: Verify Linkage
               env:
                   EXPECTS_LIBDDWAF: ${{ matrix.expects_libddwaf }}
@@ -279,13 +324,13 @@ jobs:
 
     complete:
         name: Complete
-        needs: [linters, tests, source-tests-linux, source-tests-windows, docker-tests, coverage, leak-check]
+        needs: [linters, tests, source-tests-linux, windows-gnu-image, source-tests-windows, docker-tests, coverage, leak-check]
         if: '!cancelled()'
         runs-on: ubuntu-latest
         steps:
             - name: Success
-              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.source-tests-linux.result == 'success' && needs.source-tests-windows.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
+              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.source-tests-linux.result == 'success' && needs.windows-gnu-image.result == 'success' && needs.source-tests-windows.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
               run: echo 'Success!'
             - name: Failure
-              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.source-tests-linux.result != 'success' || needs.source-tests-windows.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
+              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.source-tests-linux.result != 'success' || needs.windows-gnu-image.result != 'success' || needs.source-tests-windows.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
               run: echo 'Failure!' && exit 1
