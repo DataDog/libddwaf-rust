@@ -155,6 +155,22 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+            - name: Diagnose Name Resolution (temporary)
+              continue-on-error: true
+              run: |-
+                  set -x
+                  cat /etc/resolv.conf
+                  cat /run/systemd/resolve/resolv.conf || true
+                  resolvectl status || true
+                  cat /etc/docker/daemon.json || true
+                  for name in archive.ubuntu.com azure.archive.ubuntu.com github.com dl-cdn.alpinelinux.org; do
+                    timeout 15 getent ahosts "$name" | head -3 || echo "host getent $name failed: $?"
+                    timeout 15 dig +time=3 +tries=1 "$name" A | grep -E "status:|^$name|SERVER" || true
+                    timeout 15 dig +time=3 +tries=1 @168.63.129.16 "$name" A | grep -E "status:|^$name" || true
+                  done
+                  timeout 60 sudo apt-get update -o Acquire::Retries=0 || echo "host apt-get update failed: $?"
+                  docker run --rm ubuntu:26.04 sh -c 'cat /etc/resolv.conf; getent ahosts archive.ubuntu.com | head -3; getent ahosts github.com | head -1' || true
+                  docker run --rm --network host ubuntu:26.04 sh -c 'cat /etc/resolv.conf; getent ahosts archive.ubuntu.com | head -3; getent ahosts github.com | head -1' || true
             - name: Build and Push if Missing
               id: image
               env:
