@@ -20,18 +20,9 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Format check
               run: make format_check
             - name: Run Clippy
@@ -44,20 +35,9 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
-            - name: Install tools
-              run: cargo install cargo-bundle-licenses
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Generate LICENSE_3rdparty.csv
               run: make LICENSE-3rdparty.csv
             - name: Check for changes
@@ -80,18 +60,9 @@ jobs:
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Run Tests
               run: cargo test --all-targets && cargo test --doc
             - name: Run Dynamic Tests
@@ -119,18 +90,10 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-source-linux-${{ matrix.name }}-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-source-linux-${{ matrix.name }}-${{ github.ref_name }}-
+                  key: source-linux-${{ matrix.name }}
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Run Tests
               env:
                   FEATURES: ${{ matrix.features }}
@@ -182,18 +145,10 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-source-windows-zigbuild-0.21.8-${{ matrix.name }}-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-source-windows-zigbuild-0.21.8-${{ matrix.name }}-${{ github.ref_name }}-
+                  key: source-windows-zigbuild-${{ matrix.name }}
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Install Test Tools
               run: |-
                   zig_version=0.14.1
@@ -207,9 +162,7 @@ jobs:
                     --strip-components=1
                   echo "$zig_dir" >> "$GITHUB_PATH"
                   rustup target add x86_64-pc-windows-gnu
-                  if ! command -v cargo-zigbuild >/dev/null; then
-                    cargo install cargo-zigbuild --locked --version 0.21.8
-                  fi
+                  cargo install cargo-zigbuild --locked --version 0.21.8
                   sudo apt-get update
                   sudo apt-get install --yes --no-install-recommends wine
             - name: Build Tests
@@ -278,18 +231,9 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Install tools
               run: cargo +nightly install cargo-llvm-cov
             - name: Test Coverage
@@ -308,18 +252,9 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Leak Check
               run: make leak_check
 
