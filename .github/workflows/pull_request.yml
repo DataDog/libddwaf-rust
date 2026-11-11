@@ -167,6 +167,8 @@ jobs:
                     timeout 15 getent ahosts "$name" | head -3 || echo "host getent $name failed: $?"
                     timeout 15 dig +time=3 +tries=1 "$name" A | grep -E "status:|^$name|SERVER" || true
                     timeout 15 dig +time=3 +tries=1 @168.63.129.16 "$name" A | grep -E "status:|^$name" || true
+                    timeout 15 dig +time=3 +tries=1 @1.1.1.1 "$name" A | grep -E "status:|^$name" || true
+                    timeout 15 dig +time=3 +tries=1 @8.8.8.8 "$name" A | grep -E "status:|^$name" || true
                   done
                   timeout 60 sudo apt-get update -o Acquire::Retries=0 || echo "host apt-get update failed: $?"
                   docker run --rm ubuntu:26.04 sh -c 'cat /etc/resolv.conf; getent ahosts archive.ubuntu.com | head -3; getent ahosts github.com | head -1' || true
@@ -185,8 +187,12 @@ jobs:
                     echo "$image is already published"
                     exit 0
                   fi
-                  # Show whether the runner resolves the Ubuntu package hosts.
-                  getent hosts archive.ubuntu.com security.ubuntu.com || true
+                  # Azure's resolver (168.63.129.16), which the runner and its
+                  # containers use, has been failing for *.ubuntu.com (SERVFAIL
+                  # or timeouts) while resolving other names fine. Give the
+                  # build's containers public resolvers instead.
+                  echo '{"dns": ["1.1.1.1", "8.8.8.8"]}' | sudo tee /etc/docker/daemon.json
+                  sudo systemctl restart docker
                   docker build -t "$image" -f .github/docker/windows-gnu.Dockerfile .github/docker
                   docker push "$image"
 
