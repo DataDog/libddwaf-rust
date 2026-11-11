@@ -1,17 +1,21 @@
 check: test miri clippy format_check
 .PHONY: check
 
+# Extra cargo feature flags, e.g. "--no-default-features --features ring --features serde"
+# to build with ring instead of the default aws-lc-rs crypto provider (faster to compile).
+CARGO_FEATURE_FLAGS ?=
+
 test:
-	cargo test --all-targets
-	cargo test --doc
+	cargo test --all-targets $(CARGO_FEATURE_FLAGS)
+	cargo test --doc $(CARGO_FEATURE_FLAGS)
 .PHONY: test
 
 miri:
-	cargo +nightly miri test --lib --tests
+	cargo +nightly miri test --lib --tests $(CARGO_FEATURE_FLAGS)
 .PHONY: miri
 
 coverage:
-	cargo +nightly llvm-cov test --all-targets --branch --quiet --lcov --output-path=target/lcov.info \
+	cargo +nightly llvm-cov test --all-targets $(CARGO_FEATURE_FLAGS) --branch --quiet --lcov --output-path=target/lcov.info \
 		--fail-under-lines=85
 	cargo +nightly llvm-cov report --html --output-dir=target/coverage
 ifndef GITHUB_STEP_SUMMARY
@@ -26,7 +30,7 @@ endif
 .PHONY: coverage
 
 clippy:
-	cargo clippy --all-targets
+	cargo clippy --all-targets $(CARGO_FEATURE_FLAGS)
 .PHONY: clippy
 
 format_check:
@@ -37,7 +41,7 @@ format_check:
 # proc-macro crates with sanitizers enabled.
 leak_check: HOST_TRIPLE = $(shell rustc +nightly -vV | sed -n 's/^host: //p')
 leak_check:
-	RUSTFLAGS="-Zsanitizer=leak" LSAN_OPTIONS="symbolize=1:external_symbolizer_path=/usr/bin/addr2line" cargo +nightly test --all-targets --target $(HOST_TRIPLE) --target-dir target/leak_check
+	RUSTFLAGS="-Zsanitizer=leak" LSAN_OPTIONS="symbolize=1:external_symbolizer_path=/usr/bin/addr2line" cargo +nightly test --all-targets $(CARGO_FEATURE_FLAGS) --target $(HOST_TRIPLE) --target-dir target/leak_check
 .PHONY: leak_check
 
 Cargo.lock: Cargo.toml

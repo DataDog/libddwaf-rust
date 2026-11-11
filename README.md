@@ -42,6 +42,20 @@ this automatically for Cargo's binaries and test executables.
 ### `serde`
 The `serde` feature (enabled by default) provides `serde` implementations for `libddwaf::objects::*` types.
 
+### `aws-lc-rs`, `ring` and `fips`
+These select the TLS crypto provider the `libddwaf-sys` build script uses to download the prebuilt `libddwaf` release;
+they have no effect on the code of the final binary. `aws-lc-rs` is enabled by default. To use `ring` instead (for
+example, because `aws-lc-sys` fails to build with your toolchain, or simply because it compiles faster), disable the
+default features and enable `ring`:
+
+```toml
+libddwaf = { version = "2", default-features = false, features = ["ring", "serde"] }
+```
+
+`fips` uses `aws-lc-rs` in FIPS mode, and fails the build if a non-FIPS crypto library such as `ring` ends up in the
+dependency graph. No provider is needed when building from source (`source-static`/`source-shared`) or using
+`LIBDDWAF_PREFIX`.
+
 ### `dynamic`
 The `dynamic` feature (disabled by default) causes the native `libddwaf` library to be loaded at run-time using
 `libloading` instead of being statically linked into the `libddwaf-sys` crate. Enabling the `dynamic` feature can be

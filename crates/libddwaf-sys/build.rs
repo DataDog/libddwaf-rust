@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
 use flate2::read::GzDecoder;
-use reqwest::blocking::get;
 use tar::Archive;
 
 const GITHUB_RELEASE_BASE_URL: &str = "https://github.com/DataDog/libddwaf/releases/download";
@@ -116,7 +115,7 @@ fn main() {
     } else if let Some(prefix) = libddwaf_prefix {
         from_installed_libddwaf(&prefix)
     } else {
-        // No default provider is enabled in reqwest, which makes it easier to
+        // No default provider is enabled in rustls, which makes it easier to
         // maintain FIPS compliance. Install one before downloading a release.
         install_crypto_provider();
         from_release(&version, &out_dir)
@@ -367,13 +366,7 @@ fn from_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'static st
 
         // Construct the download URL
         let archive_url = format!("{base_url}/{version}/{archive_name}");
-        let response = get(&archive_url).expect("Failed to download archive");
-        assert!(
-            response.status().is_success(),
-            "Failed to download archive from {archive_url}: {status}",
-            status = response.status()
-        );
-        (response, soname, false)
+        (download(&archive_url), soname, false)
     };
 
     // Extract the archive
@@ -445,6 +438,45 @@ fn from_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'static st
     (include_dir, lib_dir, soname)
 }
 
+/// Fetches `url`, returning a reader over the response body.
+///
+/// TLS goes through rustls with the process-wide crypto provider installed by
+/// `install_crypto_provider` and the platform's native root certificates, so
+/// that corporate TLS-intercepting proxies trusted by the system keep working.
+/// Proxies are taken from the usual `HTTPS_PROXY`/`ALL_PROXY`/`NO_PROXY`
+/// environment variables.
+fn download(url: &str) -> impl io::Read {
+    use ureq::tls::{Certificate, RootCerts, TlsConfig};
+
+    let native = rustls_native_certs::load_native_certs();
+    if native.certs.is_empty() {
+        panic!(
+            "Failed to load any native root certificates: {:?}",
+            native.errors
+        );
+    }
+    let roots: Vec<Certificate<'static>> = native
+        .certs
+        .iter()
+        .map(|der| Certificate::from_der(der.as_ref()).to_owned())
+        .collect();
+
+    let agent = ureq::Agent::config_builder()
+        .tls_config(
+            TlsConfig::builder()
+                .root_certs(RootCerts::new_with_certs(&roots))
+                .build(),
+        )
+        .build()
+        .new_agent();
+    agent
+        .get(url)
+        .call()
+        .unwrap_or_else(|error| panic!("Failed to download archive from {url}: {error}"))
+        .into_body()
+        .into_reader()
+}
+
 /// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.
 fn check_forbidden_dependency(dependency_name: &str) -> Result<(), String> {
     println!("cargo::warning=Checking for {dependency_name} dependency...");
@@ -504,7 +536,7 @@ fn check_forbidden_dependency(dependency_name: &str) -> Result<(), String> {
             Ensure all dependencies use aws-lc-rs instead of non-FIPS compliant cryptographic libraries.\n\
             Consider updating the following in your Cargo.toml:\n\
             1. Ensure all dependencies that use rustls have the 'aws-lc-rs' feature\n\
-            2. Check transitive dependencies in reqwest, hyper-rustls, etc.\n\
+            2. Check transitive dependencies in ureq, rustls, etc.\n\
             3. Update your dependencies to versions that support FIPS mode\n",
             deps = deps.join("\n"),
         );

@@ -18,7 +18,12 @@ serde = { version = "1.0", optional = true }
 serde_json = "1.0"
 
 [features]
-default = ["serde"]
+default = ["aws-lc-rs", "serde"]
+# Crypto provider for libddwaf-sys's build script, used to download the prebuilt
+# libddwaf release. One of them is required unless libddwaf is built from source
+# or taken from LIBDDWAF_PREFIX. See libddwaf-sys for details.
+aws-lc-rs = ["libddwaf-sys/aws-lc-rs"]
+ring = ["libddwaf-sys/ring"]
 fips = ["libddwaf-sys/fips"]
 serde = ["dep:serde"]
 # Embeds libddwaf and loads it at runtime (no external library needed)
