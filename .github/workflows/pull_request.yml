@@ -168,6 +168,20 @@ jobs:
               with:
                   key: source-windows-zigbuild-${{ matrix.name }}
                   save-if: ${{ github.ref == 'refs/heads/main' }}
+            - name: Start Fetching the Wine Image
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |-
+                  # Fetched in the background so that it overlaps with the build.
+                  # Tags not yet published (e.g. in a PR changing the Dockerfile)
+                  # are built locally instead.
+                  image="$(.github/docker/wine-image-ref.sh)"
+                  echo "WINE_IMAGE=$image" >> "$GITHUB_ENV"
+                  echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+                  nohup sh -c "docker pull '$image' || docker build -t '$image' \
+                    -f .github/docker/wine.Dockerfile .github/docker" \
+                    > "$RUNNER_TEMP/wine-image.log" 2>&1 &
+                  echo $! > "$RUNNER_TEMP/wine-image.pid"
             - name: Install Test Tools
               run: |-
                   zig_version=0.14.1
@@ -182,8 +196,6 @@ jobs:
                   echo "$zig_dir" >> "$GITHUB_PATH"
                   rustup target add x86_64-pc-windows-gnu
                   cargo install cargo-zigbuild --locked --version 0.21.8
-                  sudo apt-get update
-                  sudo apt-get install --yes --no-install-recommends wine
             - name: Build Tests
               env:
                   FEATURES: ${{ matrix.features }}
@@ -193,9 +205,12 @@ jobs:
                     --target x86_64-pc-windows-gnu $CARGO_FEATURE_FLAGS --features "$FEATURES" \
                     --message-format=json > target/source-test-artifacts.json
             - name: Run Tests with Wine
-              env:
-                  WINEDEBUG: "-all"
               run: |-
+                  while kill -0 "$(cat "$RUNNER_TEMP/wine-image.pid")" 2> /dev/null; do
+                    sleep 1
+                  done
+                  cat "$RUNNER_TEMP/wine-image.log"
+                  docker image inspect "$WINE_IMAGE" > /dev/null
                   mapfile -t test_binaries < <(jq -r '
                     select(
                       .reason == "compiler-artifact" and
@@ -204,9 +219,13 @@ jobs:
                     ) | .executable
                   ' target/source-test-artifacts.json)
                   test "${#test_binaries[@]}" -gt 0
-                  for test_binary in "${test_binaries[@]}"; do
-                    wine "$test_binary"
-                  done
+                  # Run as the runner's user so nothing root-owned lands in target/.
+                  docker run --rm --user "$(id -u):$(id -g)" --env HOME=/tmp \
+                    --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+                    --workdir "$GITHUB_WORKSPACE" "$WINE_IMAGE" \
+                    sh -ec 'export WINEPREFIX="$(mktemp -d)"
+                      for test_binary; do wine "$test_binary"; done' \
+                    sh "${test_binaries[@]}"
             - name: Verify Linkage
               env:
                   EXPECTS_LIBDDWAF: ${{ matrix.expects_libddwaf }}
