@@ -169,8 +169,10 @@ jobs:
                     echo "$image is already published"
                     exit 0
                   fi
-                  # The runners cannot resolve archive.ubuntu.com; use their mirror.
-                  docker build -t "$image" \
+                  # The runners only resolve their own Azure Ubuntu mirror, and
+                  # only from the host network, not from Docker's default one.
+                  getent hosts azure.archive.ubuntu.com archive.ubuntu.com || true
+                  docker build --network host -t "$image" \
                     --build-arg UBUNTU_MIRROR=http://azure.archive.ubuntu.com/ubuntu \
                     -f .github/docker/windows-gnu.Dockerfile .github/docker
                   docker push "$image"

@@ -7,7 +7,8 @@
 # tag is not published yet.
 
 # Replaces archive.ubuntu.com and security.ubuntu.com when set. GitHub's runners
-# cannot resolve those, so CI passes the runners' own (Azure) mirror.
+# cannot resolve those, so CI passes the runners' own (Azure) mirror (and builds
+# with --network host, as Docker's default network cannot resolve it either).
 ARG UBUNTU_MIRROR=
 
 FROM ubuntu:26.04 AS zig
