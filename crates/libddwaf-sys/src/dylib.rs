@@ -81,18 +81,6 @@ macro_rules! reexport {
     };
 }
 
-#[cfg(not(libddwaf_windows_dll))]
-pub unsafe extern "C" fn ddwaf_object_set_string_nocopy(
-    object: *mut ddwaf_object,
-    string: *const std::os::raw::c_char,
-    length: u32,
-) -> *mut ddwaf_object {
-    match LIBRARY.as_ref() {
-        Some(library) => unsafe { library.ddwaf_object_set_string_nocopy(object, string, length) },
-        None => std::ptr::null_mut(),
-    }
-}
-
 // Please keep this list alphanumerically sorted for convenience.
 reexport! {
     pub unsafe fn ddwaf_allocator_alloc(alloc: ddwaf_allocator, bytes: usize, alignment: usize) -> *mut ::std::os::raw::c_void { std::ptr::null_mut() }
@@ -153,6 +141,7 @@ reexport! {
     pub unsafe fn ddwaf_object_set_signed(object: *mut ddwaf_object, value: i64) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_string(object: *mut ddwaf_object, string: *const ::std::os::raw::c_char, length: u32, alloc: ddwaf_allocator) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_string_literal(object: *mut ddwaf_object, string: *const ::std::os::raw::c_char, length: u32) -> *mut ddwaf_object { std::ptr::null_mut() }
+    pub unsafe fn ddwaf_object_set_string_nocopy(object: *mut ddwaf_object, string: *const ::std::os::raw::c_char, length: u32) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_object_set_unsigned(object: *mut ddwaf_object, value: u64) -> *mut ddwaf_object { std::ptr::null_mut() }
     pub unsafe fn ddwaf_set_log_cb(cb: ddwaf_log_cb, min_level: DDWAF_LOG_LEVEL) -> bool { false }
     pub unsafe fn ddwaf_subcontext_destroy(subcontext: ddwaf_subcontext) {}

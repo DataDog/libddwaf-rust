@@ -125,11 +125,6 @@ fn main() {
         "cargo::rustc-link-search=native={}",
         lib_dir.to_str().unwrap()
     );
-    let windows_dll = target_os == "windows" && (feature_dynamic || feature_dynamic_link);
-    println!("cargo::rustc-check-cfg=cfg(libddwaf_windows_dll)");
-    if windows_dll {
-        println!("cargo::rustc-cfg=libddwaf_windows_dll");
-    }
     if !feature_source {
         if feature_dynamic_link {
             println!("cargo::rustc-link-lib=dylib=ddwaf");
@@ -185,14 +180,6 @@ fn main() {
         .prepend_enum_name(false)
         // Specifically allow-list supported/useful functions to avoid bloat.
         .allowlist_function("^ddwaf_.*");
-    // This function is in the Windows static library, but libddwaf 2.1.0 does
-    // not export it from ddwaf.dll. A compatible Rust implementation is used
-    // whenever the DLL is selected.
-    let builder = if windows_dll {
-        builder.blocklist_function("^ddwaf_object_set_string_nocopy$")
-    } else {
-        builder
-    };
     let builder = if feature_dynamic {
         let filename = out_dir.join(format!("{soname}.zst"));
         let zstd_file = File::create(&filename).expect("failed to create zstd file");
