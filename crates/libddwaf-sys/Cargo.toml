@@ -23,6 +23,7 @@ tracing = { version = "0.1", optional = true }
 zstd = { version = "0.14.3", optional = true }
 
 [build-dependencies]
+sha2 = "0.10"
 bindgen = "0.72"
 flate2 = "1.1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "http2", "rustls-tls-native-roots-no-provider"] }
@@ -50,6 +51,7 @@ dynamic = [
     "tracing",
     "zstd",
 ]
+dynamic-system = ["dynamic"]
 # Links to the libddwaf shared library dynamically (simpler, requires the library at runtime)
 dynamic-link = []
 # Builds and statically links libddwaf from source; required for Windows GNU static linking

@@ -7,6 +7,7 @@ use std::process::{exit, Command};
 
 use flate2::read::GzDecoder;
 use reqwest::blocking::get;
+use sha2::{Digest, Sha256};
 use tar::Archive;
 
 // Crypto provider for the build script's own downloader. Chooses whichever of
@@ -36,6 +37,7 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     let feature_dynamic = env::var("CARGO_FEATURE_DYNAMIC").is_ok();
+    let feature_dynamic_system = env::var("CARGO_FEATURE_DYNAMIC_SYSTEM").is_ok();
     let feature_dynamic_link = env::var("CARGO_FEATURE_DYNAMIC_LINK").is_ok();
     let feature_source_static = env::var("CARGO_FEATURE_SOURCE_STATIC").is_ok();
     let feature_source_shared = env::var("CARGO_FEATURE_SOURCE_SHARED").is_ok();
@@ -48,6 +50,11 @@ fn main() {
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH")
         .expect("CARGO_CFG_TARGET_ARCH environment variable not set");
 
+    if feature_dynamic_system && (feature_source || libddwaf_prefix.is_none()) {
+        panic!(
+            "The `dynamic-system` feature requires LIBDDWAF_PREFIX and cannot use source builds"
+        );
+    }
     if feature_dynamic && feature_dynamic_link {
         panic!(
             "The `dynamic` and `dynamic-link` features are mutually exclusive. Please enable only one."
@@ -65,8 +72,8 @@ fn main() {
     if feature_source && libddwaf_prefix.is_some() {
         panic!("LIBDDWAF_PREFIX cannot be used with `source-static` or `source-shared`");
     }
-    if target_os == "windows" && target_arch != "x86_64" {
-        panic!("Unsupported Windows architecture: {target_arch}; only x86_64 is supported");
+    if target_os == "windows" {
+        windows_archive_arch(&target_arch);
     }
     if target_os == "windows"
         && target_env == "gnu"
@@ -151,13 +158,14 @@ fn main() {
     // Note: We check the TARGET environment variable, not cfg!(target_os), because
     // cfg! evaluates for the build script's host, not the cross-compilation target
     let target = env::var("TARGET").expect("TARGET environment variable not set");
-    if target.contains("apple") || target.contains("darwin") {
+    if !feature_dynamic_system && (target.contains("apple") || target.contains("darwin")) {
         println!("cargo::rustc-link-lib=c++");
     }
 
     // if we want to disable this in final binaries, see maybe
     // https://github.com/rust-lang/cargo/issues/4789#issuecomment-2308131243
     match target_os.as_str() {
+        _ if feature_dynamic_system => {}
         "linux" => {
             println!(
                 "cargo::rustc-link-arg=-Wl,-rpath,{}",
@@ -193,7 +201,7 @@ fn main() {
     } else {
         builder
     };
-    let builder = if feature_dynamic {
+    if feature_dynamic && !feature_dynamic_system {
         let filename = out_dir.join(format!("{soname}.zst"));
         let zstd_file = File::create(&filename).expect("failed to create zstd file");
         let mut zstd = zstd::Encoder::new(zstd_file, 22).expect("failed to create zstd encoder");
@@ -206,7 +214,8 @@ fn main() {
             "cargo::rustc-env=LIBDDWAF_SHARED_OBJECT.zst={}",
             filename.display()
         );
-
+    }
+    let builder = if feature_dynamic {
         builder
             .dynamic_library_name("ddwaf")
             .dynamic_link_require_all(true)
@@ -272,10 +281,21 @@ fn from_installed_libddwaf(prefix: impl AsRef<OsStr>) -> (PathBuf, PathBuf, &'st
 fn shared_library_name() -> &'static str {
     match env::var("CARGO_CFG_TARGET_OS").as_deref() {
         Ok("macos") => "libddwaf.dylib",
-        Ok("linux") => "libddwaf.so",
+        Ok("linux" | "freebsd") => "libddwaf.so",
         Ok("windows") => "ddwaf.dll",
         Ok(target_os) => panic!("Unsupported target OS: {target_os}"),
         Err(error) => panic!("CARGO_CFG_TARGET_OS is unavailable: {error}"),
+    }
+}
+
+fn windows_archive_arch(target_arch: &str) -> &'static str {
+    match target_arch {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        "x86" => "win32",
+        _ => panic!(
+            "Unsupported Windows architecture: {target_arch}; supported architectures are x86_64, aarch64 and x86"
+        ),
     }
 }
 
@@ -306,6 +326,7 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
     // Target triple for the current build
     let target = env::var("TARGET").expect("TARGET environment variable not set");
     let target_os = env::var("CARGO_CFG_TARGET_OS").expect("CARGO_CFG_TARGET_OS unavailable");
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH unavailable");
 
     // Output directory
     let download_dir = out_dir.join("download").join(&target);
@@ -349,7 +370,10 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
                 "libddwaf.dylib",
             ),
             _ if target_os == "windows" => (
-                format!("libddwaf-{version}-windows-x64.tar.gz"),
+                format!(
+                    "libddwaf-{version}-windows-{}.tar.gz",
+                    windows_archive_arch(&target_arch)
+                ),
                 "ddwaf.dll",
             ),
             target => panic!("Unsupported target platform: {target}"),
@@ -363,7 +387,37 @@ fn from_github_release(version: &str, out_dir: &Path) -> (PathBuf, PathBuf, &'st
             "Failed to download archive from {archive_url}: {status}",
             status = response.status()
         );
-        (response, soname, false)
+        let archive = response.bytes().expect("Failed to read libddwaf archive");
+        let expected = match archive_name.as_str() {
+            "libddwaf-2.1.0-aarch64-linux-musl.tar.gz" => {
+                "ba4a51e3c96ab3421d0c83c4b711cf2ade47aa5c986653c4c66527feffd80bec"
+            }
+            "libddwaf-2.1.0-x86_64-linux-musl.tar.gz" => {
+                "b1a4a57098ec86d8e07036ecd9a43f4fc3b3d4497924c9ceffd91089647ab2ac"
+            }
+            "libddwaf-2.1.0-darwin-arm64.tar.gz" => {
+                "bba0f952f3bd119b10008d3a2e9f263bed892bccd5eee3e5ea576336b6978651"
+            }
+            "libddwaf-2.1.0-darwin-x86_64.tar.gz" => {
+                "3ca7bd84c2d4220379a1f0ca4b42fc93677beeec99675c951f301e80885a1281"
+            }
+            "libddwaf-2.1.0-windows-arm64.tar.gz" => {
+                "124247affb836e0f042514b29bf8258ee77967207c4504c3c6c1ffecc212264f"
+            }
+            "libddwaf-2.1.0-windows-win32.tar.gz" => {
+                "e4cbd6f26656f4d98a5e4ccb276b15009a076486b1d36cead897d4c66cf3fb82"
+            }
+            "libddwaf-2.1.0-windows-x64.tar.gz" => {
+                "b7cd03f964e5bf0de1a1191b26a33c04adaea714ef94952f7a8b44a70060b8d3"
+            }
+            _ => panic!("No pinned checksum for {archive_name}"),
+        };
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&archive)),
+            expected,
+            "libddwaf archive checksum mismatch"
+        );
+        (io::Cursor::new(archive), soname, false)
     };
 
     // Extract the archive

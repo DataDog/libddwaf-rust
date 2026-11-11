@@ -97,7 +97,10 @@ macro_rules! forward {
 
 forward!(builder, config, context, handle);
 
-/// Returns the version of the underlying `libddwaf` library.
+/// The libddwaf version targeted by these bindings.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Returns the version of the underlying `libddwaf` library, or an empty string if runtime loading fails.
 #[must_use]
 pub fn version() -> &'static CStr {
     let ptr = unsafe { libddwaf_sys::ddwaf_get_version() };

@@ -31,7 +31,7 @@ The `libddwaf-sys` crate uses [`bindgen`][bindgen], which requires the libclang 
 
 ## Windows
 
-Windows x86-64 targets are supported and use static linking by default. MSVC targets can use the prebuilt static
+Windows x86-64, ARM64 and 32-bit x86 targets are supported and use static linking by default. MSVC targets can use the prebuilt static
 library, but GNU targets must enable `source-static` for static linking because the release static library depends on
 the MSVC C++ runtime. GNU targets can explicitly enable `dynamic` to embed `ddwaf.dll`, or `dynamic-link` to link it
 dynamically. For `dynamic-link`, copy `ddwaf.dll` alongside an executable when redistributing it; the build script does
@@ -48,6 +48,11 @@ The `dynamic` feature (disabled by default) causes the native `libddwaf` library
 useful to reduce the stat-up overhead in case the `libddwaf` features are not always used (such as if the security
 features are opt-in); but it increases the size of the final binary & decreases overall performance of using those
 functions (due to their being dynamically dispatched).
+
+### `dynamic-system`
+Enables the `dynamic` loader without embedding a library. Set `LIBDDWAF_PREFIX` to the system development
+package prefix for its header; loading uses the OS search path on first use. Load failures return fallback
+values, including an empty version string, and are cached for the process lifetime.
 
 ### `dynamic-link`
 Mutually exclusive with `dynamic`. Plain dynamic linking against the shared `libddwaf` library. The library (called

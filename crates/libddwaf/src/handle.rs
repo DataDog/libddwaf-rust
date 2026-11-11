@@ -21,6 +21,15 @@ impl Handle {
         }
     }
 
+    /// Creates a context, returning `None` if native context allocation fails.
+    #[must_use]
+    pub fn try_new_context(&self) -> Option<Context> {
+        let raw = unsafe {
+            libddwaf_sys::ddwaf_context_init(self.raw, get_default_allocator().into())
+        };
+        if raw.is_null() { None } else { Some(Context { raw }) }
+    }
+
     /// Returns the list of actions that may be produced by this instance's ruleset.
     pub fn known_actions(&self) -> Vec<&CStr> {
         self.call_cstr_array_fn(libddwaf_sys::ddwaf_known_actions)
