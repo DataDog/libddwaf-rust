@@ -147,4 +147,27 @@ the required C++ runtime dependency. It is not needed for official releases.
 For details on available features (`serde`, `dynamic`, `dynamic-link`, `fips`,
 `source-static`, `source-shared`), see the [README](README.md).
 
+## Releasing
+
+Releases are published to crates.io by the Release workflow
+(`.github/workflows/release.yml`):
+
+1. Bump `version` in the workspace `Cargo.toml` (and the exact `libddwaf-sys`
+   requirement in `crates/libddwaf/Cargo.toml`) and merge that to `main`.
+2. Tag the merged commit and push the tag:
+   ```bash
+   git tag v2.2.1 <commit-on-main>
+   git push origin v2.2.1
+   ```
+3. The workflow checks that the tag matches the crate versions, that the
+   commit is on `main` and that the Validation workflow passed for it. It then
+   waits for a reviewer of the `crates-io` environment to approve the publish
+   job, which publishes `libddwaf-sys` and then `libddwaf`.
+
+The publish job authenticates with crates.io
+[Trusted Publishing](https://crates.io/docs/trusted-publishing), so no crates.io
+token is stored in the repository. Each crate must have a trusted publisher
+configured on crates.io for repository `DataDog/libddwaf-rust`, workflow
+`release.yml` and environment `crates-io`.
+
 # vim: set ts sw=4 ts=4 tw=80:
