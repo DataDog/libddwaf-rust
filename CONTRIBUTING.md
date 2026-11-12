@@ -16,6 +16,13 @@ Runs the complete quality assurance suite: tests, miri, clippy, and format
 checking. This is the recommended target to run before submitting a pull
 request.
 
+All cargo-based targets append `CARGO_FEATURE_FLAGS` to their cargo commands.
+CI uses it to build with `ring` instead of the default `aws-lc-rs` crypto
+provider, which compiles noticeably faster; you can do the same locally:
+```bash
+make test CARGO_FEATURE_FLAGS='--no-default-features --features ring --features serde'
+```
+
 ### `make test`
 
 Runs the full test suite:

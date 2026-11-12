@@ -12,30 +12,38 @@ concurrency:
 
 permissions: read-all
 
+env:
+    # Most jobs use ring as the build script's crypto provider: it builds much
+    # faster than the default aws-lc-rs. The Linters job and the Docker-based
+    # tests keep the default, so aws-lc-rs stays covered.
+    CARGO_FEATURE_FLAGS: --no-default-features --features ring --features serde
+
 jobs:
     linters:
         name: Linters
         runs-on: ubuntu-latest
+        env:
+            CARGO_FEATURE_FLAGS: ""
         steps:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Format check
               run: make format_check
             - name: Run Clippy
               run: make clippy
+            - name: Check aws-lc-rs is the default crypto provider
+              run: |-
+                  cargo tree --edges normal,build --invert aws-lc-sys --prefix none \
+                    | grep -q '^aws-lc-sys v'
+                  if cargo tree --edges normal,build --invert ring --prefix none 2>/dev/null \
+                    | grep -q '^ring v'; then
+                    echo "ring is in the default dependency graph" >&2
+                    exit 1
+                  fi
 
     licenses:
         name: Licenses
@@ -44,20 +52,9 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
-            - name: Install tools
-              run: cargo install cargo-bundle-licenses
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Generate LICENSE_3rdparty.csv
               run: make LICENSE-3rdparty.csv
             - name: Check for changes
@@ -80,24 +77,15 @@ jobs:
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Run Tests
-              run: cargo test --all-targets && cargo test --doc
+              run: cargo test --all-targets ${{ env.CARGO_FEATURE_FLAGS }} && cargo test --doc ${{ env.CARGO_FEATURE_FLAGS }}
             - name: Run Dynamic Tests
-              run: cargo test --all-targets --features dynamic
+              run: cargo test --all-targets ${{ env.CARGO_FEATURE_FLAGS }} --features dynamic
             - name: Run Dynamic Link Tests
-              run: cargo test --all-targets --features dynamic-link
+              run: cargo test --all-targets ${{ env.CARGO_FEATURE_FLAGS }} --features dynamic-link
 
     source-tests-linux:
         name: Tests with libddwaf-src (${{ matrix.name }} | Linux)
@@ -119,30 +107,24 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-source-linux-${{ matrix.name }}-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-source-linux-${{ matrix.name }}-${{ github.ref_name }}-
+                  key: source-linux-${{ matrix.name }}
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Run Tests
               env:
                   FEATURES: ${{ matrix.features }}
               run: |-
-                  cargo test --workspace --all-targets --features "$FEATURES"
-                  cargo test --workspace --doc --features "$FEATURES"
+                  cargo test --workspace --all-targets $CARGO_FEATURE_FLAGS --features "$FEATURES"
+                  cargo test --workspace --doc $CARGO_FEATURE_FLAGS --features "$FEATURES"
             - name: Verify Linkage
               env:
                   EXPECTS_LIBDDWAF: ${{ matrix.expects_libddwaf }}
                   FEATURES: ${{ matrix.features }}
               run: |-
-                  cargo test -p libddwaf-sys --test tests --features "$FEATURES" \
+                  # libddwaf-sys has no serde feature; ring alone matches the flags above.
+                  cargo test -p libddwaf-sys --test tests --no-default-features \
+                    --features ring --features "$FEATURES" \
                     --no-run --message-format=json > target/source-test-artifacts.json
                   test_binary="$(jq -r '
                     select(
@@ -162,6 +144,40 @@ jobs:
                   fi
                   test "$actual" = "$EXPECTS_LIBDDWAF"
 
+    windows-gnu-image:
+        name: Windows-GNU tools image
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+        outputs:
+            image: ${{ steps.image.outputs.image }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+            - name: Build and Push if Missing
+              id: image
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |-
+                  # The tag is a hash of the Dockerfile, so this only builds
+                  # when the Dockerfile changed.
+                  image="$(.github/docker/windows-gnu-image-ref.sh)"
+                  echo "image=$image" >> "$GITHUB_OUTPUT"
+                  echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+                  if docker manifest inspect "$image" > /dev/null 2>&1; then
+                    echo "$image is already published"
+                    exit 0
+                  fi
+                  # Azure's resolver (168.63.129.16), which the runner and its
+                  # containers use, has been failing for *.ubuntu.com (SERVFAIL
+                  # or timeouts) while resolving other names fine. Give the
+                  # build's containers public resolvers instead.
+                  echo '{"dns": ["1.1.1.1", "8.8.8.8"]}' | sudo tee /etc/docker/daemon.json
+                  sudo systemctl restart docker
+                  docker build -t "$image" -f .github/docker/windows-gnu.Dockerfile .github/docker
+                  docker push "$image"
+
     source-tests-windows:
         name: Tests with libddwaf-src (${{ matrix.name }} | Windows zigbuild + Wine)
         strategy:
@@ -177,52 +193,49 @@ jobs:
                     - name: dynamic-link
                       features: source-shared,dynamic-link
                       expects_libddwaf: "yes"
+        needs: windows-gnu-image
         runs-on: ubuntu-latest
+        env:
+            WINDOWS_GNU_IMAGE: ${{ needs.windows-gnu-image.outputs.image }}
         steps:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-source-windows-zigbuild-0.21.8-${{ matrix.name }}-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-source-windows-zigbuild-0.21.8-${{ matrix.name }}-${{ github.ref_name }}-
+                  key: source-windows-zigbuild-${{ matrix.name }}
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
+                  # Only the windows-gnu standard library: the rest of the
+                  # toolchain ships with the runner image.
+                  cache-directories: ~/.rustup/toolchains/*/lib/rustlib/x86_64-pc-windows-gnu
+            - name: Fetch the Windows-GNU Tools Image
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |-
+                  echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+                  docker pull "$WINDOWS_GNU_IMAGE"
+                  # The build runs on the runner; it only needs zig from the image.
+                  container="$(docker create "$WINDOWS_GNU_IMAGE")"
+                  docker cp "$container:/opt/zig" "$RUNNER_TEMP/zig"
+                  docker rm "$container" > /dev/null
+                  echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
             - name: Install Test Tools
               run: |-
-                  zig_version=0.14.1
-                  zig_dir="$RUNNER_TEMP/zig"
-                  zig_archive="$RUNNER_TEMP/zig.tar.xz"
-                  curl --fail --location --silent --show-error \
-                    "https://ziglang.org/download/$zig_version/zig-x86_64-linux-$zig_version.tar.xz" \
-                    --output "$zig_archive"
-                  mkdir "$zig_dir"
-                  tar --extract --file "$zig_archive" --directory "$zig_dir" \
-                    --strip-components=1
-                  echo "$zig_dir" >> "$GITHUB_PATH"
-                  rustup target add x86_64-pc-windows-gnu
-                  if ! command -v cargo-zigbuild >/dev/null; then
-                    cargo install cargo-zigbuild --locked --version 0.21.8
+                  # Restored by the cache when present; rustup would not know,
+                  # as its own bookkeeping under ~/.rustup is not cached.
+                  if [ ! -d "$(rustc --print sysroot)/lib/rustlib/x86_64-pc-windows-gnu" ]; then
+                    rustup target add x86_64-pc-windows-gnu
                   fi
-                  sudo apt-get update
-                  sudo apt-get install --yes --no-install-recommends wine
+                  cargo install cargo-zigbuild --locked --version 0.21.8
             - name: Build Tests
               env:
                   FEATURES: ${{ matrix.features }}
               run: |-
                   mkdir -p target
                   cargo zigbuild --workspace --all-targets \
-                    --target x86_64-pc-windows-gnu --features "$FEATURES" \
+                    --target x86_64-pc-windows-gnu $CARGO_FEATURE_FLAGS --features "$FEATURES" \
                     --message-format=json > target/source-test-artifacts.json
             - name: Run Tests with Wine
-              env:
-                  WINEDEBUG: "-all"
               run: |-
                   mapfile -t test_binaries < <(jq -r '
                     select(
@@ -232,9 +245,13 @@ jobs:
                     ) | .executable
                   ' target/source-test-artifacts.json)
                   test "${#test_binaries[@]}" -gt 0
-                  for test_binary in "${test_binaries[@]}"; do
-                    wine "$test_binary"
-                  done
+                  # Run as the runner's user so nothing root-owned lands in target/.
+                  docker run --rm --user "$(id -u):$(id -g)" --env HOME=/tmp \
+                    --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+                    --workdir "$GITHUB_WORKSPACE" "$WINDOWS_GNU_IMAGE" \
+                    sh -ec 'export WINEPREFIX="$(mktemp -d)"
+                      for test_binary; do wine "$test_binary"; done' \
+                    sh "${test_binaries[@]}"
             - name: Verify Linkage
               env:
                   EXPECTS_LIBDDWAF: ${{ matrix.expects_libddwaf }}
@@ -278,18 +295,9 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Install tools
               run: cargo +nightly install cargo-llvm-cov
             - name: Test Coverage
@@ -308,30 +316,21 @@ jobs:
             - name: Checkout
               uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
             - name: Cache
-              uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
               with:
-                  path: |-
-                    ~/.cargo/bin/
-                    ~/.cargo/git/db/
-                    ~/.cargo/registry/cache/
-                    ~/.cargo/registry/index/
-                    ~/.rustup/downloads/
-                    ~/.rustup/update-hashes/
-                    target/
-                  key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-${{ hashFiles('.cargo/config.toml', '**/Cargo.toml') }}
-                  restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.ref_name }}-
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
             - name: Leak Check
               run: make leak_check
 
     complete:
         name: Complete
-        needs: [linters, tests, source-tests-linux, source-tests-windows, docker-tests, coverage, leak-check]
+        needs: [linters, tests, source-tests-linux, windows-gnu-image, source-tests-windows, docker-tests, coverage, leak-check]
         if: '!cancelled()'
         runs-on: ubuntu-latest
         steps:
             - name: Success
-              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.source-tests-linux.result == 'success' && needs.source-tests-windows.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
+              if: needs.linters.result == 'success' && needs.tests.result == 'success' && needs.source-tests-linux.result == 'success' && needs.windows-gnu-image.result == 'success' && needs.source-tests-windows.result == 'success' && needs.docker-tests.result == 'success' && needs.coverage.result == 'success' && needs.leak-check.result == 'success'
               run: echo 'Success!'
             - name: Failure
-              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.source-tests-linux.result != 'success' || needs.source-tests-windows.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
+              if: needs.linters.result != 'success' || needs.tests.result != 'success' || needs.source-tests-linux.result != 'success' || needs.windows-gnu-image.result != 'success' || needs.source-tests-windows.result != 'success' || needs.docker-tests.result != 'success' || needs.coverage.result != 'success' || needs.leak-check.result != 'success'
               run: echo 'Failure!' && exit 1
