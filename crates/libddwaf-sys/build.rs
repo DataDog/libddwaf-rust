@@ -469,12 +469,36 @@ fn download(url: &str) -> impl io::Read {
         )
         .build()
         .new_agent();
-    agent
-        .get(url)
-        .call()
-        .unwrap_or_else(|error| panic!("Failed to download archive from {url}: {error}"))
-        .into_body()
-        .into_reader()
+    // CI downloads are sometimes slow or briefly unavailable (timeouts, 5xx): retry a few times
+    // with backoff. The whole body is read inside the retry, so a mid-transfer timeout is
+    // retried too. Other HTTP errors (e.g. 404 for an unknown version) fail at once.
+    const ATTEMPTS: u32 = 4;
+    for attempt in 1..=ATTEMPTS {
+        let result = agent.get(url).call().and_then(|response| {
+            let mut body = Vec::new();
+            io::copy(&mut response.into_body().into_reader(), &mut body)?;
+            Ok(body)
+        });
+        match result {
+            Ok(body) => return io::Cursor::new(body),
+            Err(error) if attempt < ATTEMPTS && is_transient(&error) => {
+                let delay = std::time::Duration::from_secs(5 * u64::from(attempt));
+                println!(
+                    "cargo::warning=Downloading {url} failed (attempt {attempt}/{ATTEMPTS}): {error}, retrying in {delay:?}"
+                );
+                std::thread::sleep(delay);
+            }
+            Err(error) => panic!("Failed to download archive from {url}: {error}"),
+        }
+    }
+    unreachable!()
+}
+
+fn is_transient(error: &ureq::Error) -> bool {
+    match error {
+        ureq::Error::StatusCode(status) => *status == 408 || *status == 429 || *status >= 500,
+        _ => true,
+    }
 }
 
 /// Checks if a specific dependency is present in the dependency tree when FIPS is enabled.
